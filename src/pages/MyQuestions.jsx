@@ -27,28 +27,16 @@ function formatTime(value) {
   }).format(new Date(value))
 }
 
-function getMessageStyle(role) {
+function getBubbleClass(role) {
   if (role === 'owner') {
-    return {
-      justifySelf: 'end',
-      background: '#eef6ff',
-      border: '1px solid #b9dcff',
-    }
+    return 'message-bubble incoming'
   }
 
   if (role === 'ai') {
-    return {
-      justifySelf: 'center',
-      background: '#f5f5f5',
-      border: '1px solid #ddd',
-    }
+    return 'message-bubble neutral'
   }
 
-  return {
-    justifySelf: 'start',
-    background: '#fff7e8',
-    border: '1px solid #ead3a6',
-  }
+  return 'message-bubble outgoing'
 }
 
 export default function MyQuestions({ onBack }) {
@@ -117,99 +105,82 @@ export default function MyQuestions({ onBack }) {
   }, [])
 
   return (
-    <div>
-      <h2>Чат с дворецким</h2>
+    <div className="page-stack">
+      <section className="hero-card black">
+        <h2>Чат с дворецким</h2>
+        <p>Одна приватная переписка: вопросы, ответы владельца и продолжение диалога.</p>
+      </section>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <button onClick={loadChat} disabled={loading}>
-          Обновить чат
-        </button>
+      <section className="chat-panel">
+        <div className="toolbar" style={{ marginBottom: '18px' }}>
+          <button onClick={loadChat} disabled={loading}>
+            Обновить чат
+          </button>
 
-        <button onClick={onBack}>
-          Вернуться в профиль
-        </button>
-      </div>
+          <button className="secondary" onClick={onBack}>
+            Вернуться в профиль
+          </button>
+        </div>
 
-      {loading && <p>Загрузка чата...</p>}
+        {loading && <p className="status-message">Загрузка чата...</p>}
 
-      {statusMessage && <p>{statusMessage}</p>}
+        {statusMessage && <p className="notice danger">{statusMessage}</p>}
 
-      {!loading && sortedMessages.length === 0 && (
-        <p>Сообщений пока нет</p>
-      )}
+        {!loading && sortedMessages.length === 0 && (
+          <p className="notice">Сообщений пока нет</p>
+        )}
 
-      <div
-        style={{
-          display: 'grid',
-          gap: '10px',
-          marginBottom: '20px',
-        }}
-      >
-        {sortedMessages.map((message) => (
-          <article
-            key={message.id}
-            style={{
-              ...getMessageStyle(message.sender_role),
-              width: 'min(100%, 460px)',
-              borderRadius: '8px',
-              padding: '10px 12px',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '6px' }}>
-              <strong>{roleLabels[message.sender_role] || message.sender_role}</strong>
-              <span style={{ color: '#666', fontSize: '12px' }}>
-                {formatTime(message.created_at)}
-              </span>
-            </div>
-
-            {message.sender_role === 'user' && (
-              <div style={{ color: '#765400', fontSize: '12px', marginBottom: '6px' }}>
-                {importanceLabels[message.importance] || message.importance}
+        <div className="message-list">
+          {sortedMessages.map((message) => (
+            <article key={message.id} className={getBubbleClass(message.sender_role)}>
+              <div className="message-head">
+                <span>{roleLabels[message.sender_role] || message.sender_role}</span>
+                <span className="message-time">{formatTime(message.created_at)}</span>
               </div>
-            )}
 
-            <div style={{ whiteSpace: 'pre-wrap' }}>
-              {message.body}
-            </div>
+              {message.sender_role === 'user' && (
+                <span className={`badge ${message.importance === 'urgent' ? 'red' : ''}`}>
+                  {importanceLabels[message.importance] || message.importance}
+                </span>
+              )}
 
-            {message.body_zh && (
-              <div style={{ whiteSpace: 'pre-wrap', marginTop: '8px', color: '#555' }}>
-                {message.body_zh}
+              <div style={{ marginTop: message.sender_role === 'user' ? '10px' : 0 }}>
+                {message.body}
               </div>
-            )}
-          </article>
-        ))}
-      </div>
 
-      <form onSubmit={handleSubmit}>
-        <label>
-          <strong>Новое сообщение</strong>
-        </label>
-        <textarea
-          value={messageText}
-          onChange={(event) => setMessageText(event.target.value)}
-          rows="5"
-          placeholder="Напишите сообщение владельцу"
-          style={{ width: '100%', marginTop: '8px', marginBottom: '12px' }}
-        />
+              {message.body_zh && (
+                <div style={{ marginTop: '10px' }}>
+                  {message.body_zh}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'end', flexWrap: 'wrap' }}>
-          <label>
-            <strong>Важность</strong>
-            <br />
-            <select
-              value={importance}
-              onChange={(event) => setImportance(event.target.value)}
-              style={{ marginTop: '8px' }}
+      <form className="composer" onSubmit={handleSubmit}>
+        <div className="importance-pills" aria-label="Важность сообщения">
+          {Object.entries(importanceLabels).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`importance-pill secondary ${importance === value ? 'active' : ''} ${value === 'urgent' ? 'urgent' : ''}`}
+              onClick={() => setImportance(value)}
             >
-              <option value="normal">Обычное</option>
-              <option value="important">Важное</option>
-              <option value="urgent">Срочное</option>
-            </select>
-          </label>
+              {label}
+            </button>
+          ))}
+        </div>
 
-          <button type="submit" disabled={sending}>
-            {sending ? 'Отправка...' : 'Отправить'}
+        <div className="composer-row">
+          <input
+            value={messageText}
+            onChange={(event) => setMessageText(event.target.value)}
+            placeholder="текст"
+          />
+
+          <button className="icon" type="submit" disabled={sending} aria-label="Отправить">
+            →
           </button>
         </div>
       </form>

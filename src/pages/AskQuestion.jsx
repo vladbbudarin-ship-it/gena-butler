@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { submitQuestion } from '../lib/api'
 
+const urgencyLabels = {
+  normal: 'Обычный',
+  important: 'Важный',
+  urgent: 'Срочный',
+}
+
 export default function AskQuestion({ onBack }) {
   const [questionText, setQuestionText] = useState('')
   const [urgencyLevel, setUrgencyLevel] = useState('normal')
@@ -35,57 +41,55 @@ export default function AskQuestion({ onBack }) {
   }
 
   return (
-    <div>
-      <h2>Задать вопрос</h2>
+    <div className="page-stack">
+      <section className="hero-card black">
+        <h2>Задать вопрос</h2>
+        <p>Опишите запрос для дворецкого. Он появится и в рабочем кабинете владельца, и в переписке.</p>
+      </section>
 
-      <p>
-        Опишите вопрос, а затем выберите уровень срочности.
-      </p>
-
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '16px' }}>
+      <form className="dashboard-card form-stack" onSubmit={handleSubmit}>
+        <div>
           <label>
             <strong>Ваш вопрос</strong>
           </label>
-          <br />
           <textarea
             value={questionText}
             onChange={(event) => setQuestionText(event.target.value)}
             placeholder="Например: можно завтра подтвердить встречу с партнёром?"
             rows="6"
-            style={{ width: '100%', marginTop: '8px' }}
           />
         </div>
 
-        <div style={{ marginBottom: '16px' }}>
+        <div>
           <label>
             <strong>Срочность</strong>
           </label>
-          <br />
-
-          <select
-            value={urgencyLevel}
-            onChange={(event) => setUrgencyLevel(event.target.value)}
-            style={{ marginTop: '8px' }}
-          >
-            <option value="normal">Обычный</option>
-            <option value="important">Важный</option>
-            <option value="urgent">Срочный</option>
-          </select>
+          <div className="importance-pills">
+            {Object.entries(urgencyLabels).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`importance-pill secondary ${urgencyLevel === value ? 'active' : ''} ${value === 'urgent' ? 'urgent' : ''}`}
+                onClick={() => setUrgencyLevel(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="form-actions">
           <button type="submit" disabled={loading}>
             {loading ? 'Отправка...' : 'Отправить вопрос'}
           </button>
 
-          <button type="button" onClick={onBack}>
+          <button className="secondary" type="button" onClick={onBack}>
             Вернуться в профиль
           </button>
         </div>
       </form>
 
-      {message && <p>{message}</p>}
+      {message && <p className="notice">{message}</p>}
     </div>
   )
 }

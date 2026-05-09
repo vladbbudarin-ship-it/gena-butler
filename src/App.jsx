@@ -7,6 +7,16 @@ import AskQuestion from './pages/AskQuestion'
 import MyQuestions from './pages/MyQuestions'
 import OwnerDashboard from './pages/OwnerDashboard'
 
+function BrandPanel() {
+  return (
+    <aside className="brand-panel">
+      <div className="brand-avatar" />
+      <div className="brand-vertical">ГЕНА</div>
+      <div className="brand-sign">Буb</div>
+    </aside>
+  )
+}
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [screen, setScreen] = useState('login')
@@ -28,62 +38,93 @@ export default function App() {
   }, [])
 
   if (loading) {
-    return <p>Загрузка...</p>
+    return (
+      <main className="app-shell auth">
+        <section className="auth-card">
+          <div className="wordmark">ГЕНА</div>
+          <p>Загрузка...</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (!user) {
+    return (
+      <main className="app-shell auth">
+        <div className="app-frame auth-frame">
+          <section className="auth-card">
+            <div className="wordmark">ГЕНА</div>
+            <p className="auth-subtitle">Budarin&apos;s messenger</p>
+
+            <nav className="auth-tabs">
+              <button
+                className={screen === 'login' ? 'active' : ''}
+                onClick={() => setScreen('login')}
+              >
+                Вход
+              </button>
+              <button
+                className={screen === 'register' ? 'active' : ''}
+                onClick={() => setScreen('register')}
+              >
+                Регистрация
+              </button>
+            </nav>
+
+            {screen === 'login' && (
+              <Login
+                onLogin={(loggedUser) => {
+                  setUser(loggedUser)
+                  setScreen('profile')
+                }}
+              />
+            )}
+
+            {screen === 'register' && <Register />}
+          </section>
+        </div>
+      </main>
+    )
   }
 
   return (
-    <main style={{ maxWidth: '960px', margin: '40px auto', fontFamily: 'Arial' }}>
-      <h1>Дворецкий Гена</h1>
-      <p>Вежливый помощник для обработки вопросов.</p>
+    <main className="app-shell">
+      <div className="app-frame">
+        <section className="content-panel">
+          {screen === 'profile' && (
+            <Profile
+              user={user}
+              onAskQuestion={() => setScreen('ask')}
+              onOpenMyQuestions={() => setScreen('myQuestions')}
+              onOpenOwnerDashboard={() => setScreen('owner')}
+              onLogout={() => {
+                setUser(null)
+                setScreen('login')
+              }}
+            />
+          )}
 
-      {!user && (
-        <nav style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-          <button onClick={() => setScreen('login')}>Вход</button>
-          <button onClick={() => setScreen('register')}>Регистрация</button>
-        </nav>
-      )}
+          {screen === 'ask' && (
+            <AskQuestion
+              onBack={() => setScreen('profile')}
+            />
+          )}
 
-      {!user && screen === 'login' && (
-        <Login
-          onLogin={(loggedUser) => {
-            setUser(loggedUser)
-            setScreen('profile')
-          }}
-        />
-      )}
+          {screen === 'myQuestions' && (
+            <MyQuestions
+              onBack={() => setScreen('profile')}
+            />
+          )}
 
-      {!user && screen === 'register' && <Register />}
+          {screen === 'owner' && (
+            <OwnerDashboard
+              onBack={() => setScreen('profile')}
+            />
+          )}
+        </section>
 
-      {user && screen === 'profile' && (
-        <Profile
-          user={user}
-          onAskQuestion={() => setScreen('ask')}
-          onOpenMyQuestions={() => setScreen('myQuestions')}
-          onOpenOwnerDashboard={() => setScreen('owner')}
-          onLogout={() => {
-            setUser(null)
-            setScreen('login')
-          }}
-        />
-      )}
-
-      {user && screen === 'ask' && (
-        <AskQuestion
-          onBack={() => setScreen('profile')}
-        />
-      )}
-
-      {user && screen === 'myQuestions' && (
-        <MyQuestions
-          onBack={() => setScreen('profile')}
-        />
-      )}
-
-      {user && screen === 'owner' && (
-        <OwnerDashboard
-          onBack={() => setScreen('profile')}
-        />
-      )}
+        <BrandPanel />
+      </div>
     </main>
   )
 }

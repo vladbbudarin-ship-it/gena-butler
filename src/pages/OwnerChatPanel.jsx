@@ -27,48 +27,34 @@ function formatTime(value) {
   }).format(new Date(value))
 }
 
-function getMessageStyle(role) {
+function getBubbleClass(role) {
   if (role === 'owner') {
-    return {
-      justifySelf: 'end',
-      background: '#eef6ff',
-      border: '1px solid #b9dcff',
-    }
+    return 'message-bubble outgoing'
   }
 
   if (role === 'ai') {
-    return {
-      justifySelf: 'center',
-      background: '#f5f5f5',
-      border: '1px solid #ddd',
-    }
+    return 'message-bubble neutral'
   }
 
-  return {
-    justifySelf: 'start',
-    background: '#fff7e8',
-    border: '1px solid #ead3a6',
-  }
+  return 'message-bubble incoming'
 }
 
-function getConversationAccent(conversation) {
-  const importance = conversation.last_message?.importance
+function getConversationClass(conversation, isSelected) {
+  const parts = ['chat-list-item']
 
-  if (importance === 'urgent') {
-    return {
-      borderColor: '#cf3f35',
-      background: '#fff1f0',
-    }
+  if (isSelected) {
+    parts.push('active')
   }
 
-  if (importance === 'important') {
-    return {
-      borderColor: '#d9a400',
-      background: '#fff9e6',
-    }
+  if (conversation.last_message?.importance === 'urgent') {
+    parts.push('urgent')
   }
 
-  return {}
+  if (conversation.last_message?.importance === 'important') {
+    parts.push('important')
+  }
+
+  return parts.join(' ')
 }
 
 export default function OwnerChatPanel() {
@@ -174,150 +160,121 @@ export default function OwnerChatPanel() {
   }, [loadSelectedConversation, selectedConversationId])
 
   return (
-    <section style={{ marginBottom: '28px' }}>
-      <h3>Чаты с пользователями</h3>
+    <section className="hero-card">
+      <div className="owner-chat-shell">
+        <aside className="side-list">
+          <div className="chat-list-title">Чаты</div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <button onClick={loadConversations} disabled={loadingList}>
-          Обновить диалоги
-        </button>
+          <div className="toolbar" style={{ marginBottom: '16px' }}>
+            <button onClick={loadConversations} disabled={loadingList}>
+              Обновить
+            </button>
+          </div>
 
-        <button onClick={refreshCurrentChat} disabled={!selectedConversationId || loadingChat}>
-          Обновить чат
-        </button>
-      </div>
+          {loadingList && <p>Загрузка диалогов...</p>}
+          {!loadingList && conversations.length === 0 && <p>Диалогов пока нет</p>}
 
-      {message && <p>{message}</p>}
-
-      {loadingList && <p>Загрузка диалогов...</p>}
-
-      {!loadingList && conversations.length === 0 && (
-        <p>Диалогов пока нет</p>
-      )}
-
-      {conversations.length > 0 && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: '16px',
-            alignItems: 'start',
-          }}
-        >
-          <div style={{ display: 'grid', gap: '8px' }}>
+          <div className="chat-list">
             {conversations.map((conversation) => {
               const profile = conversation.user_profile || {}
               const isSelected = conversation.id === selectedConversationId
-              const accent = getConversationAccent(conversation)
 
               return (
                 <button
                   key={conversation.id}
+                  className={getConversationClass(conversation, isSelected)}
                   onClick={() => setSelectedConversationId(conversation.id)}
-                  style={{
-                    textAlign: 'left',
-                    border: isSelected ? '2px solid #333' : '1px solid #ddd',
-                    borderRadius: '8px',
-                    padding: '10px',
-                    ...accent,
-                  }}
                 >
-                  <strong>{profile.name || 'Без имени'}</strong>
-                  <br />
-                  <span>{profile.email || 'email не найден'}</span>
-                  {conversation.unread_count > 0 && (
-                    <div style={{ marginTop: '6px' }}>
-                      Непрочитано: {conversation.unread_count}
-                    </div>
-                  )}
-                  {conversation.last_message && (
-                    <div style={{ marginTop: '8px', color: '#555' }}>
-                      <span>{conversation.last_message.body}</span>
-                      <br />
+                  <span className="mini-avatar" />
+                  <span className="chat-list-copy">
+                    <strong>{profile.name || 'Без имени'}</strong>
+                    <span>{profile.email || 'email не найден'}</span>
+                    {conversation.last_message && (
                       <small>
                         {importanceLabels[conversation.last_message.importance] || conversation.last_message.importance}
                         {' · '}
-                        {formatTime(conversation.last_message.created_at)}
+                        {conversation.last_message.body}
                       </small>
-                    </div>
+                    )}
+                  </span>
+                  {conversation.unread_count > 0 && (
+                    <span className="badge red">{conversation.unread_count}</span>
                   )}
                 </button>
               )
             })}
           </div>
+        </aside>
 
-          <div>
-            {loadingChat && <p>Загрузка чата...</p>}
+        <div className="chat-main">
+          <div className="toolbar">
+            <button onClick={refreshCurrentChat} disabled={!selectedConversationId || loadingChat}>
+              Обновить чат
+            </button>
+          </div>
 
-            {!loadingChat && selectedConversation && (
-              <>
-                <h4>
-                  {selectedConversation.user_profile?.name || 'Пользователь'} ·{' '}
-                  {selectedConversation.user_profile?.email || 'email не найден'}
-                </h4>
+          {message && <p className="notice danger">{message}</p>}
+          {loadingChat && <p>Загрузка чата...</p>}
 
-                {sortedMessages.length === 0 && (
-                  <p>Сообщений пока нет</p>
-                )}
+          {!loadingChat && selectedConversation && (
+            <>
+              <h3>
+                {selectedConversation.user_profile?.name || 'Пользователь'}
+              </h3>
+              <p>{selectedConversation.user_profile?.email || 'email не найден'}</p>
 
-                <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
-                  {sortedMessages.map((chatMessage) => (
-                    <article
-                      key={chatMessage.id}
-                      style={{
-                        ...getMessageStyle(chatMessage.sender_role),
-                        width: 'min(100%, 460px)',
-                        borderRadius: '8px',
-                        padding: '10px 12px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '6px' }}>
-                        <strong>{roleLabels[chatMessage.sender_role] || chatMessage.sender_role}</strong>
-                        <span style={{ color: '#666', fontSize: '12px' }}>
-                          {formatTime(chatMessage.created_at)}
-                        </span>
+              {sortedMessages.length === 0 && <p className="notice">Сообщений пока нет</p>}
+
+              <div className="message-list">
+                {sortedMessages.map((chatMessage) => (
+                  <article key={chatMessage.id} className={getBubbleClass(chatMessage.sender_role)}>
+                    <div className="message-head">
+                      <span>{roleLabels[chatMessage.sender_role] || chatMessage.sender_role}</span>
+                      <span className="message-time">{formatTime(chatMessage.created_at)}</span>
+                    </div>
+
+                    {chatMessage.sender_role === 'user' && (
+                      <span className={`badge ${chatMessage.importance === 'urgent' ? 'red' : ''}`}>
+                        {importanceLabels[chatMessage.importance] || chatMessage.importance}
+                      </span>
+                    )}
+
+                    <div style={{ marginTop: chatMessage.sender_role === 'user' ? '10px' : 0 }}>
+                      {chatMessage.body}
+                    </div>
+
+                    {chatMessage.body_zh && (
+                      <div style={{ marginTop: '10px' }}>
+                        {chatMessage.body_zh}
                       </div>
+                    )}
+                  </article>
+                ))}
+              </div>
 
-                      {chatMessage.sender_role === 'user' && (
-                        <div style={{ color: '#765400', fontSize: '12px', marginBottom: '6px' }}>
-                          {importanceLabels[chatMessage.importance] || chatMessage.importance}
-                        </div>
-                      )}
-
-                      <div style={{ whiteSpace: 'pre-wrap' }}>
-                        {chatMessage.body}
-                      </div>
-
-                      {chatMessage.body_zh && (
-                        <div style={{ whiteSpace: 'pre-wrap', marginTop: '8px', color: '#555' }}>
-                          {chatMessage.body_zh}
-                        </div>
-                      )}
-                    </article>
-                  ))}
-                </div>
-
-                <form onSubmit={handleSend}>
-                  <label>
-                    <strong>Ответ владельца</strong>
-                  </label>
-                  <textarea
+              <form className="composer" onSubmit={handleSend}>
+                <div className="composer-row">
+                  <input
                     value={replyText}
                     onChange={(event) => setReplyText(event.target.value)}
-                    rows="4"
-                    placeholder="Напишите ответ пользователю"
-                    style={{ width: '100%', marginTop: '8px', marginBottom: '12px' }}
+                    placeholder="текст"
                   />
 
-                  <button type="submit" disabled={sending}>
-                    {sending ? 'Отправка...' : 'Отправить'}
+                  <button className="icon" type="submit" disabled={sending} aria-label="Отправить">
+                    →
                   </button>
-                </form>
-              </>
-            )}
-          </div>
+                </div>
+              </form>
+            </>
+          )}
         </div>
-      )}
+
+        <aside className="brand-panel chat-brand">
+          <div className="brand-avatar" />
+          <div className="brand-vertical">ГЕНА</div>
+          <div className="brand-sign">Буb</div>
+        </aside>
+      </div>
     </section>
   )
 }

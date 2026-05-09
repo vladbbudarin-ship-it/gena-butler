@@ -4,39 +4,64 @@ import OwnerChatPanel from './OwnerChatPanel'
 
 const closedStatuses = ['approved', 'edited', 'manual_reply', 'rejected']
 
-function getStatusLabel(status) {
-  const labels = {
-    new: 'Новый',
-    ai_processing: 'AI обрабатывает',
-    draft_ready: 'Черновик готов',
-    approved: 'Утверждён',
-    edited: 'Отредактирован',
-    manual_reply: 'Личный ответ',
-    rejected: 'Отклонён',
-    ai_error: 'Ошибка AI',
-  }
+const statusLabels = {
+  new: 'Новый',
+  ai_processing: 'AI обрабатывает',
+  draft_ready: 'Черновик готов',
+  approved: 'Утверждён',
+  edited: 'Отредактирован',
+  manual_reply: 'Личный ответ',
+  rejected: 'Отклонён',
+  ai_error: 'Ошибка AI',
+}
 
-  return labels[status] || status
+const urgencyLabels = {
+  normal: 'Обычный',
+  important: 'Важный',
+  urgent: 'Срочный',
+}
+
+const importanceLabels = {
+  low: 'Низкая',
+  medium: 'Средняя',
+  high: 'Высокая',
+}
+
+function getStatusLabel(status) {
+  return statusLabels[status] || status
 }
 
 function getUrgencyLabel(urgency) {
-  const labels = {
-    normal: 'Обычный',
-    important: 'Важный',
-    urgent: 'Срочный',
-  }
-
-  return labels[urgency] || urgency
+  return urgencyLabels[urgency] || urgency
 }
 
 function getImportanceLabel(importance) {
-  const labels = {
-    low: 'Низкая',
-    medium: 'Средняя',
-    high: 'Высокая',
+  return importanceLabels[importance] || 'Пока нет'
+}
+
+function getBadgeClass(value) {
+  if (value === 'urgent' || value === 'high' || value === 'ai_error') {
+    return 'badge red'
   }
 
-  return labels[importance] || 'Пока нет'
+  if (closedStatuses.includes(value)) {
+    return 'badge dark'
+  }
+
+  return 'badge'
+}
+
+function FieldBlock({ title, children }) {
+  if (!children) {
+    return null
+  }
+
+  return (
+    <div className="field-block">
+      <strong>{title}</strong>
+      <p>{children}</p>
+    </div>
+  )
 }
 
 export default function OwnerDashboard({ onBack }) {
@@ -136,76 +161,78 @@ export default function OwnerDashboard({ onBack }) {
     }
 
     if (filter === 'open') {
-      return questions.filter(
-        (question) => !closedStatuses.includes(question.status)
-      )
+      return questions.filter((question) => !closedStatuses.includes(question.status))
     }
 
     if (filter === 'urgent') {
-      return questions.filter(
-        (question) => question.urgency_level === 'urgent'
-      )
+      return questions.filter((question) => question.urgency_level === 'urgent')
     }
 
     if (filter === 'important') {
-      return questions.filter(
-        (question) => question.final_importance === 'high'
-      )
+      return questions.filter((question) => question.final_importance === 'high')
     }
 
     if (filter === 'ai_error') {
-      return questions.filter(
-        (question) => question.status === 'ai_error'
-      )
+      return questions.filter((question) => question.status === 'ai_error')
     }
 
     if (filter === 'closed') {
-      return questions.filter(
-        (question) => closedStatuses.includes(question.status)
-      )
+      return questions.filter((question) => closedStatuses.includes(question.status))
     }
 
     return questions
   }, [questions, filter])
 
-  return (
-    <div>
-      <h2>Кабинет владельца</h2>
+  const filters = [
+    ['all', 'Все вопросы'],
+    ['open', 'Открытые'],
+    ['urgent', 'Срочные'],
+    ['important', 'Важные'],
+    ['ai_error', 'Ошибки AI'],
+    ['closed', 'Закрытые'],
+  ]
 
-      <p>
-        Здесь отображаются вопросы пользователей и AI-черновики.
-      </p>
+  return (
+    <div className="page-stack">
+      <section className="hero-card black">
+        <h2>Кабинет владельца</h2>
+        <p>Рабочая панель для чатов, вопросов, AI-черновиков и финальных ответов.</p>
+      </section>
 
       <OwnerChatPanel />
 
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '20px' }}>
-        <button onClick={() => setFilter('all')}>Все вопросы</button>
-        <button onClick={() => setFilter('open')}>Открытые</button>
-        <button onClick={() => setFilter('urgent')}>Срочные</button>
-        <button onClick={() => setFilter('important')}>Важные</button>
-        <button onClick={() => setFilter('ai_error')}>Ошибки AI</button>
-        <button onClick={() => setFilter('closed')}>Закрытые</button>
-      </div>
+      <section className="dashboard-card">
+        <div className="filter-pills">
+          {filters.map(([value, label]) => (
+            <button
+              key={value}
+              className={filter === value ? 'active' : ''}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-        <button onClick={loadQuestions}>
-          Обновить список
-        </button>
+        <div className="toolbar" style={{ marginTop: '18px' }}>
+          <button onClick={loadQuestions}>
+            Обновить список
+          </button>
 
-        <button onClick={onBack}>
-          Вернуться в профиль
-        </button>
-      </div>
+          <button className="secondary" onClick={onBack}>
+            Вернуться в профиль
+          </button>
+        </div>
+      </section>
 
-      {loading && <p>Загрузка вопросов...</p>}
-
-      {message && <p>{message}</p>}
+      {loading && <p className="notice">Загрузка вопросов...</p>}
+      {message && <p className="notice">{message}</p>}
 
       {!loading && filteredQuestions.length === 0 && (
-        <p>Вопросов в этом разделе пока нет.</p>
+        <p className="notice">Вопросов в этом разделе пока нет.</p>
       )}
 
-      <div style={{ display: 'grid', gap: '16px' }}>
+      <div className="question-grid">
         {filteredQuestions.map((question) => {
           const isClosed = closedStatuses.includes(question.status)
           const canEdit = question.status === 'draft_ready'
@@ -213,103 +240,79 @@ export default function OwnerDashboard({ onBack }) {
           const canReject = !isClosed
 
           return (
-            <article
-              key={question.id}
-              style={{
-                border: '1px solid #ddd',
-                borderRadius: '12px',
-                padding: '16px',
-              }}
-            >
-              <h3>Вопрос</h3>
+            <article key={question.id} className="question-card">
+              <div>
+                <h3>Вопрос</h3>
+                <div className="question-meta" style={{ marginTop: '12px' }}>
+                  <span className={getBadgeClass(question.urgency_level)}>
+                    {getUrgencyLabel(question.urgency_level)}
+                  </span>
+                  <span className={getBadgeClass(question.final_importance)}>
+                    Итог: {getImportanceLabel(question.final_importance)}
+                  </span>
+                  <span className={getBadgeClass(question.status)}>
+                    {getStatusLabel(question.status)}
+                  </span>
+                </div>
+              </div>
 
-              <p>
-                <strong>Пользователь:</strong>{' '}
-                {question.user_profile?.name || 'Без имени'} —{' '}
-                {question.user_profile?.email || 'email не найден'}
-              </p>
+              <div className="question-meta">
+                <span className="badge">
+                  {question.user_profile?.name || 'Без имени'}
+                </span>
+                <span className="badge">
+                  {question.user_profile?.email || 'email не найден'}
+                </span>
+                <span className={question.user_profile?.is_important_contact ? 'badge dark' : 'badge'}>
+                  Важный контакт: {question.user_profile?.is_important_contact ? 'Да' : 'Нет'}
+                </span>
+                <span className="badge">
+                  AI: {getImportanceLabel(question.ai_importance)}
+                </span>
+              </div>
 
-              <p>
-                <strong>Важный контакт:</strong>{' '}
-                {question.user_profile?.is_important_contact ? 'Да' : 'Нет'}
-              </p>
-
-              <p>
-                <strong>Срочность:</strong>{' '}
-                {getUrgencyLabel(question.urgency_level)}
-              </p>
-
-              <p>
-                <strong>AI-важность:</strong>{' '}
-                {getImportanceLabel(question.ai_importance)}
-              </p>
-
-              <p>
-                <strong>Итоговая важность:</strong>{' '}
-                {getImportanceLabel(question.final_importance)}
-              </p>
-
-              <p>
-                <strong>Статус:</strong>{' '}
-                {getStatusLabel(question.status)}
-              </p>
-
-              <p>
-                <strong>Текст вопроса:</strong>
-                <br />
+              <FieldBlock title="Текст вопроса">
                 {question.question_text}
-              </p>
+              </FieldBlock>
 
               {question.ai_reason && (
-                <p>
-                  <strong>Причина AI:</strong>
-                  <br />
+                <FieldBlock title="Причина AI">
                   {question.ai_reason}
-                </p>
+                </FieldBlock>
               )}
 
               {question.draft_ru && (
-                <p>
-                  <strong>AI-черновик RU:</strong>
-                  <br />
+                <FieldBlock title="AI-черновик RU">
                   {question.draft_ru}
-                </p>
+                </FieldBlock>
               )}
 
               {question.draft_zh && (
-                <p>
-                  <strong>AI-черновик ZH:</strong>
-                  <br />
+                <FieldBlock title="AI-черновик ZH">
                   {question.draft_zh}
-                </p>
+                </FieldBlock>
               )}
 
               {question.final_answer_ru && (
-                <p>
-                  <strong>Финальный ответ RU:</strong>
-                  <br />
+                <FieldBlock title="Финальный ответ RU">
                   {question.final_answer_ru}
-                </p>
+                </FieldBlock>
               )}
 
               {question.final_answer_zh && (
-                <p>
-                  <strong>Финальный ответ ZH:</strong>
-                  <br />
+                <FieldBlock title="Финальный ответ ZH">
                   {question.final_answer_zh}
-                </p>
+                </FieldBlock>
               )}
 
               {question.ai_error_message && (
-                <p>
-                  <strong>Ошибка AI:</strong>
-                  <br />
+                <FieldBlock title="Ошибка AI">
                   {question.ai_error_message}
-                </p>
+                </FieldBlock>
               )}
 
               {!isClosed && (
-                <div style={{ display: 'flex', gap: '12px', marginTop: '16px', flexWrap: 'wrap' }}>
+                <div className="button-row">
                   {question.status === 'draft_ready' && (
                     <button
                       onClick={() =>
@@ -326,6 +329,7 @@ export default function OwnerDashboard({ onBack }) {
 
                   {canEdit && (
                     <button
+                      className="secondary"
                       onClick={() => startEditing(question)}
                       disabled={actionLoadingId === question.id}
                     >
@@ -335,6 +339,7 @@ export default function OwnerDashboard({ onBack }) {
 
                   {canManualReply && (
                     <button
+                      className="secondary"
                       onClick={() => startManualReply(question)}
                       disabled={actionLoadingId === question.id}
                     >
@@ -344,6 +349,7 @@ export default function OwnerDashboard({ onBack }) {
 
                   {canReject && (
                     <button
+                      className="danger-outline"
                       onClick={() =>
                         handleOwnerAction({
                           questionId: question.id,
@@ -359,9 +365,8 @@ export default function OwnerDashboard({ onBack }) {
               )}
 
               {editingId === question.id && (
-                <div style={{ marginTop: '16px' }}>
+                <div className="owner-edit-box">
                   <h4>Редактировать AI-ответ</h4>
-
                   <label>
                     <strong>Ответ RU</strong>
                   </label>
@@ -369,14 +374,12 @@ export default function OwnerDashboard({ onBack }) {
                     value={editRu}
                     onChange={(event) => setEditRu(event.target.value)}
                     rows="5"
-                    style={{ width: '100%', marginTop: '8px', marginBottom: '12px' }}
                   />
-
-                  <p>
+                  <p className="notice">
                     Китайский перевод будет создан автоматически после сохранения.
                   </p>
 
-                  <div style={{ display: 'flex', gap: '12px' }}>
+                  <div className="button-row">
                     <button
                       onClick={() =>
                         handleOwnerAction({
@@ -391,6 +394,7 @@ export default function OwnerDashboard({ onBack }) {
                     </button>
 
                     <button
+                      className="secondary"
                       onClick={() => {
                         setEditingId(null)
                         setEditRu('')
@@ -403,9 +407,8 @@ export default function OwnerDashboard({ onBack }) {
               )}
 
               {manualId === question.id && (
-                <div style={{ marginTop: '16px' }}>
+                <div className="owner-edit-box">
                   <h4>Личный ответ владельца</h4>
-
                   <label>
                     <strong>Ответ RU</strong>
                   </label>
@@ -414,14 +417,12 @@ export default function OwnerDashboard({ onBack }) {
                     onChange={(event) => setManualRu(event.target.value)}
                     placeholder="Введите личный ответ на русском"
                     rows="5"
-                    style={{ width: '100%', marginTop: '8px', marginBottom: '12px' }}
                   />
-
-                  <p>
+                  <p className="notice">
                     Китайский перевод будет создан автоматически после сохранения.
                   </p>
 
-                  <div style={{ display: 'flex', gap: '12px' }}>
+                  <div className="button-row">
                     <button
                       onClick={() =>
                         handleOwnerAction({
@@ -436,6 +437,7 @@ export default function OwnerDashboard({ onBack }) {
                     </button>
 
                     <button
+                      className="secondary"
                       onClick={() => {
                         setManualId(null)
                         setManualRu('')

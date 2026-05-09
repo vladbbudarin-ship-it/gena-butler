@@ -37,38 +37,39 @@ export default function Register() {
 
   return (
     <div>
-      <h2>Регистрация</h2>
-
-      <form onSubmit={handleRegister}>
+      <form className="form-stack" onSubmit={handleRegister}>
         <div>
-          <label>Имя</label>
-          <br />
+          <label>
+            <strong>Имя</strong>
+          </label>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Ваше имя"
+            placeholder="ваше имя..."
           />
         </div>
 
         <div>
-          <label>Email</label>
-          <br />
+          <label>
+            <strong>Email</strong>
+          </label>
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="email@example.com"
+            placeholder="email..."
           />
         </div>
 
         <div>
-          <label>Пароль</label>
-          <br />
+          <label>
+            <strong>Пароль</strong>
+          </label>
           <input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Минимум 6 символов"
+            placeholder="минимум 6 символов..."
           />
         </div>
 
@@ -77,7 +78,7 @@ export default function Register() {
         </button>
       </form>
 
-      {message && <p>{message}</p>}
+      {message && <p className="auth-message">{message}</p>}
     </div>
   )
 }

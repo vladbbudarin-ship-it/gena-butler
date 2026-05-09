@@ -29,28 +29,28 @@ export default function Login({ onLogin }) {
 
   return (
     <div>
-      <h2>Вход</h2>
-
-      <form onSubmit={handleLogin}>
+      <form className="form-stack" onSubmit={handleLogin}>
         <div>
-          <label>Email</label>
-          <br />
+          <label>
+            <strong>Email</strong>
+          </label>
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="email@example.com"
+            placeholder="email..."
           />
         </div>
 
         <div>
-          <label>Пароль</label>
-          <br />
+          <label>
+            <strong>Пароль</strong>
+          </label>
           <input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Ваш пароль"
+            placeholder="ваш пароль..."
           />
         </div>
 
@@ -59,7 +59,7 @@ export default function Login({ onLogin }) {
         </button>
       </form>
 
-      {message && <p>{message}</p>}
+      {message && <p className="auth-message">{message}</p>}
     </div>
   )
 }

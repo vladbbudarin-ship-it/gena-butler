@@ -16,40 +16,53 @@ export default function Profile({
   }
 
   return (
-    <div>
-      <h2>Профиль</h2>
+    <div className="page-stack">
+      <section className="hero-card black">
+        <div className="wordmark small">ГЕНА</div>
+        <h2>Профиль</h2>
+        <p>Личный concierge-кабинет для вопросов, чатов и ответов владельца.</p>
+      </section>
 
-      <p>
-        <strong>Email:</strong> {user.email}
-      </p>
+      <section className="dashboard-card">
+        <div className="profile-meta">
+          <div className="meta-row">
+            <span>Email</span>
+            <strong>{user.email}</strong>
+          </div>
 
-      <p>
-        <strong>ID пользователя:</strong> {user.id}
-      </p>
+          <div className="meta-row">
+            <span>ID пользователя</span>
+            <strong>{user.id}</strong>
+          </div>
 
-      <p>
-        <strong>Роль:</strong> {isOwner ? 'Владелец' : 'Пользователь'}
-      </p>
+          <div className="meta-row">
+            <span>Роль</span>
+            <span className={`badge${isOwner ? ' dark' : ''}`}>
+              {isOwner ? 'Владелец' : 'Пользователь'}
+            </span>
+          </div>
+        </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
-        <button onClick={onAskQuestion}>
-          Задать вопрос
-        </button>
+        <div className="button-row" style={{ marginTop: '24px' }}>
+          <button onClick={onOpenMyQuestions}>
+            Чат с дворецким
+          </button>
 
-        <button onClick={onOpenMyQuestions}>
-          Чат с дворецким
-        </button>
+          <button className="secondary" onClick={onAskQuestion}>
+            Задать вопрос
+          </button>
 
-        {isOwner && (
-  <button onClick={onOpenOwnerDashboard}>
-    Кабинет владельца
-  </button>
-)}
+          {isOwner && (
+            <button className="secondary" onClick={onOpenOwnerDashboard}>
+              Кабинет владельца
+            </button>
+          )}
 
-        <button onClick={handleLogout}>
-          Выйти
-        </button>
-      </div>
+          <button className="danger-outline" onClick={handleLogout}>
+            Выйти
+          </button>
+        </div>
+      </section>
     </div>
   )
 }
