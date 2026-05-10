@@ -411,6 +411,28 @@ button.icon {
   padding-bottom: 12px;
 }
 
+.invite-code-box {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  padding: 20px;
+}
+
+.invite-code-box span,
+.invite-code-box small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.invite-code-box strong {
+  font-size: clamp(32px, 5vw, 58px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

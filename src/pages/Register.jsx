@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { registerWithInvite } from '../lib/api'
 
 export default function Register() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -13,26 +14,24 @@ export default function Register() {
     setLoading(true)
     setMessage('')
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
-        },
-      },
-    })
+    try {
+      await registerWithInvite({
+        name,
+        email,
+        password,
+        inviteCode,
+      })
 
-    if (error) {
-      setMessage(error.message)
-    } else {
       setMessage('Регистрация успешна. Теперь можно войти.')
       setName('')
       setEmail('')
       setPassword('')
+      setInviteCode('')
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   return (
@@ -70,6 +69,18 @@ export default function Register() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="минимум 6 символов..."
+          />
+        </div>
+
+        <div>
+          <label>
+            <strong>Код приглашения</strong>
+          </label>
+          <input
+            value={inviteCode}
+            onChange={(event) => setInviteCode(event.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 6))}
+            placeholder="4821AB"
+            autoComplete="one-time-code"
           />
         </div>
 

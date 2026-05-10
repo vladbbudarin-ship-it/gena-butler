@@ -1,6 +1,20 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { getMyProfile } from '../lib/api'
+import { createInviteCode, getMyProfile } from '../lib/api'
+
+function formatDateTime(value) {
+  if (!value) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
 
 export default function Profile({
   user,
@@ -12,6 +26,9 @@ export default function Profile({
   const isOwner = user.email === ownerEmail
   const [profile, setProfile] = useState(null)
   const [message, setMessage] = useState('')
+  const [invite, setInvite] = useState(null)
+  const [inviteMessage, setInviteMessage] = useState('')
+  const [inviteLoading, setInviteLoading] = useState(false)
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -25,6 +42,30 @@ export default function Profile({
 
     await navigator.clipboard.writeText(profile.public_id)
     setMessage('ID скопирован.')
+  }
+
+  async function handleCreateInvite() {
+    try {
+      setInviteLoading(true)
+      setInviteMessage('')
+
+      const inviteData = await createInviteCode()
+      setInvite(inviteData)
+      setInviteMessage('Код создан.')
+    } catch (error) {
+      setInviteMessage(error.message)
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  async function handleCopyInviteCode() {
+    if (!invite?.code) {
+      return
+    }
+
+    await navigator.clipboard.writeText(invite.code)
+    setInviteMessage('Код скопирован.')
   }
 
   useEffect(() => {
@@ -95,6 +136,35 @@ export default function Profile({
             Выйти
           </button>
         </div>
+      </section>
+
+      <section className="dashboard-card">
+        <h3>Пригласить пользователя</h3>
+        <p style={{ marginTop: '10px' }}>
+          Создайте одноразовый код. Он действует 7 дней и подходит только для одной регистрации.
+        </p>
+
+        <div className="button-row" style={{ marginTop: '20px' }}>
+          <button onClick={handleCreateInvite} disabled={inviteLoading}>
+            {inviteLoading ? 'Создаём...' : 'Пригласить'}
+          </button>
+
+          {invite?.code && (
+            <button className="secondary" onClick={handleCopyInviteCode}>
+              Скопировать код
+            </button>
+          )}
+        </div>
+
+        {invite?.code && (
+          <div className="invite-code-box">
+            <span>Invite-код</span>
+            <strong>{invite.code}</strong>
+            <small>Действует до {formatDateTime(invite.expiresAt)}</small>
+          </div>
+        )}
+
+        {inviteMessage && <p className="notice" style={{ marginTop: '18px' }}>{inviteMessage}</p>}
       </section>
     </div>
   )

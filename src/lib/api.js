@@ -138,6 +138,62 @@ export async function getMyProfile() {
   return result.profile
 }
 
+export async function createInviteCode() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const response = await fetch('/.netlify/functions/create-invite-code', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось создать invite-код.'))
+  }
+
+  return {
+    code: result.code,
+    expiresAt: result.expires_at,
+  }
+}
+
+export async function registerWithInvite({
+  name,
+  email,
+  password,
+  inviteCode,
+}) {
+  const response = await fetch('/.netlify/functions/register-with-invite', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      email,
+      password,
+      invite_code: inviteCode,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось зарегистрироваться.'))
+  }
+
+  return result
+}
+
 export async function getDirectChats() {
   const {
     data: { session },
