@@ -51,7 +51,6 @@ export const handler = async (event) => {
           'id',
           'question_text',
           'urgency_level',
-          'final_importance',
           'status',
           'final_answer_ru',
           'final_answer_zh',
