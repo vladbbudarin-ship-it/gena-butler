@@ -460,7 +460,7 @@ export default function MyQuestions({ onBack }) {
                     <button
                       key={value}
                       type="button"
-                      className={`importance-pill secondary ${urgency === value ? 'active' : ''} ${value === 'urgent' ? 'urgent' : ''}`}
+                      className={`importance-pill secondary urgency-${value} ${urgency === value ? 'active' : ''}`}
                       onClick={() => setUrgency(value)}
                     >
                       {label}

@@ -78,9 +78,18 @@ function getProfileTitle(profile) {
 
 function getConversationClass(conversation, isSelected) {
   const parts = ['chat-list-item']
+  const lastImportance = conversation.last_message?.importance
 
   if (isSelected) {
     parts.push('active')
+  }
+
+  if (lastImportance === 'urgent') {
+    parts.push('urgent')
+  }
+
+  if (lastImportance === 'important') {
+    parts.push('important')
   }
 
   return parts.join(' ')
@@ -290,6 +299,9 @@ export default function OwnerChatPanel() {
                   </span>
                   {conversation.unread_count > 0 && (
                     <span className="badge red">{conversation.unread_count}</span>
+                  )}
+                  {conversation.last_message?.importance && conversation.last_message.importance !== 'normal' && (
+                    <span className={`status-dot urgency-${conversation.last_message.importance}`} />
                   )}
                 </button>
               )

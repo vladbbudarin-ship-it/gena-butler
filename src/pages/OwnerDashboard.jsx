@@ -44,6 +44,14 @@ function getImportanceBadgeClass(importance) {
 }
 
 function getBadgeClass(value) {
+  if (['normal', 'important', 'urgent'].includes(value)) {
+    return `status-pill urgency-${value}`
+  }
+
+  if (['new', 'ai_processing', 'draft_ready', 'approved', 'edited', 'manual_reply', 'rejected', 'ai_error'].includes(value)) {
+    return `status-pill status-${value}`
+  }
+
   if (value === 'urgent' || value === 'high' || value === 'ai_error') {
     return 'badge red'
   }

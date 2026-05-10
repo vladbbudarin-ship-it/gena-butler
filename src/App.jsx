@@ -140,6 +140,41 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      <nav className="app-nav" aria-label="Основная навигация">
+        <button
+          className={screen === 'myQuestions' ? 'active' : 'secondary'}
+          type="button"
+          onClick={() => openScreen('myQuestions')}
+        >
+          Чат
+        </button>
+        <button
+          className={screen === 'profile' ? 'active' : 'secondary'}
+          type="button"
+          onClick={() => openScreen('profile')}
+        >
+          Профиль
+        </button>
+        {isOwner && (
+          <>
+            <button
+              className={screen === 'owner' ? 'active' : 'secondary'}
+              type="button"
+              onClick={() => openScreen('owner')}
+            >
+              Пользователи
+            </button>
+            <button
+              className={screen === 'owner' ? 'active' : 'secondary'}
+              type="button"
+              onClick={() => openScreen('owner')}
+            >
+              Кабинет владельца
+            </button>
+          </>
+        )}
+      </nav>
+
       <div className={`app-frame ${screen === 'myQuestions' || screen === 'owner' ? 'workspace-frame' : ''}`}>
         <section className="content-panel">
           {screen === 'profile' && (
