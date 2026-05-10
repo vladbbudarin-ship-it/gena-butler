@@ -9,7 +9,7 @@ const importanceLabels = {
 
 const roleLabels = {
   user: 'Пользователь',
-  owner: 'Владелец',
+  owner: 'Бударин',
   ai: 'AI',
 }
 
@@ -207,51 +207,63 @@ export default function OwnerChatPanel() {
         </aside>
 
         <div className="chat-main">
-          <div className="toolbar">
-            <button onClick={refreshCurrentChat} disabled={!selectedConversationId || loadingChat}>
-              Обновить чат
-            </button>
+          <div className="chat-topbar">
+            <div>
+              <h3>
+                {selectedConversation?.user_profile?.name || 'Собеседник'}
+              </h3>
+              {selectedConversation?.user_profile?.email && (
+                <p>{selectedConversation.user_profile.email}</p>
+              )}
+            </div>
+
+            <div className="toolbar">
+              <button onClick={refreshCurrentChat} disabled={!selectedConversationId || loadingChat}>
+                Обновить чат
+              </button>
+            </div>
           </div>
 
-          {message && <p className="notice danger">{message}</p>}
-          {loadingChat && <p>Загрузка чата...</p>}
+          <div className="chat-scroll">
+            {message && <p className="notice danger">{message}</p>}
+            {loadingChat && <p>Загрузка чата...</p>}
+
+            {!loadingChat && selectedConversation && (
+              <>
+                {sortedMessages.length === 0 && <p className="notice">Сообщений пока нет</p>}
+
+                <div className="message-list">
+                  {sortedMessages.map((chatMessage) => (
+                    <article key={chatMessage.id} className={getBubbleClass(chatMessage.sender_role)}>
+                      <div className="message-head">
+                        <span>{roleLabels[chatMessage.sender_role] || chatMessage.sender_role}</span>
+                        <span className="message-time">{formatTime(chatMessage.created_at)}</span>
+                      </div>
+
+                      {chatMessage.sender_role === 'user' && (
+                        <span className={`badge ${chatMessage.importance === 'urgent' ? 'red' : ''}`}>
+                          {importanceLabels[chatMessage.importance] || chatMessage.importance}
+                        </span>
+                      )}
+
+                      <div style={{ marginTop: chatMessage.sender_role === 'user' ? '10px' : 0 }}>
+                        {chatMessage.body}
+                      </div>
+
+                      {chatMessage.body_zh && (
+                        <div style={{ marginTop: '10px' }}>
+                          {chatMessage.body_zh}
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           {!loadingChat && selectedConversation && (
             <>
-              <h3>
-                {selectedConversation.user_profile?.name || 'Пользователь'}
-              </h3>
-              <p>{selectedConversation.user_profile?.email || 'email не найден'}</p>
-
-              {sortedMessages.length === 0 && <p className="notice">Сообщений пока нет</p>}
-
-              <div className="message-list">
-                {sortedMessages.map((chatMessage) => (
-                  <article key={chatMessage.id} className={getBubbleClass(chatMessage.sender_role)}>
-                    <div className="message-head">
-                      <span>{roleLabels[chatMessage.sender_role] || chatMessage.sender_role}</span>
-                      <span className="message-time">{formatTime(chatMessage.created_at)}</span>
-                    </div>
-
-                    {chatMessage.sender_role === 'user' && (
-                      <span className={`badge ${chatMessage.importance === 'urgent' ? 'red' : ''}`}>
-                        {importanceLabels[chatMessage.importance] || chatMessage.importance}
-                      </span>
-                    )}
-
-                    <div style={{ marginTop: chatMessage.sender_role === 'user' ? '10px' : 0 }}>
-                      {chatMessage.body}
-                    </div>
-
-                    {chatMessage.body_zh && (
-                      <div style={{ marginTop: '10px' }}>
-                        {chatMessage.body_zh}
-                      </div>
-                    )}
-                  </article>
-                ))}
-              </div>
-
               <form className="composer" onSubmit={handleSend}>
                 <div className="composer-row">
                   <input
@@ -270,9 +282,8 @@ export default function OwnerChatPanel() {
         </div>
 
         <aside className="brand-panel chat-brand">
-          <div className="brand-avatar" />
-          <div className="brand-vertical">ГЕНА</div>
-          <div className="brand-sign">Буb</div>
+          <img className="brand-logo-vertical" src="/brand/gena-logo-white.png" alt="Гена" />
+          <img className="brand-logo-sign" src="/brand/gena-logo-white.png" alt="" aria-hidden="true" />
         </aside>
       </div>
     </section>

@@ -1,26 +1,52 @@
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { getMyProfile } from '../lib/api'
 
 export default function Profile({
   user,
   onLogout,
-  onAskQuestion,
   onOpenMyQuestions,
   onOpenOwnerDashboard,
 }) {
   const ownerEmail = import.meta.env.VITE_OWNER_EMAIL
   const isOwner = user.email === ownerEmail
+  const [profile, setProfile] = useState(null)
+  const [message, setMessage] = useState('')
 
   async function handleLogout() {
     await supabase.auth.signOut()
     onLogout()
   }
 
+  async function handleCopyPublicId() {
+    if (!profile?.public_id) {
+      return
+    }
+
+    await navigator.clipboard.writeText(profile.public_id)
+    setMessage('ID скопирован.')
+  }
+
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        setMessage('')
+        const data = await getMyProfile()
+        setProfile(data)
+      } catch (error) {
+        setMessage(error.message)
+      }
+    }
+
+    loadProfile()
+  }, [])
+
   return (
     <div className="page-stack">
       <section className="hero-card black">
-        <div className="wordmark small">ГЕНА</div>
+        <img className="wordmark small light" src="/brand/gena-logo-white.png" alt="Гена" />
         <h2>Профиль</h2>
-        <p>Личный concierge-кабинет для вопросов, чатов и ответов владельца.</p>
+        <p>Личный concierge-кабинет для чатов, публичного ID и кабинета владельца.</p>
       </section>
 
       <section className="dashboard-card">
@@ -36,20 +62,27 @@ export default function Profile({
           </div>
 
           <div className="meta-row">
+            <span>Мой ID</span>
+            <strong>{profile?.public_id || 'Будет доступен после SQL-обновления'}</strong>
+          </div>
+
+          <div className="meta-row">
             <span>Роль</span>
             <span className={`badge${isOwner ? ' dark' : ''}`}>
-              {isOwner ? 'Владелец' : 'Пользователь'}
+              {isOwner ? 'Бударин' : 'Пользователь'}
             </span>
           </div>
         </div>
 
+        {message && <p className="notice" style={{ marginTop: '18px' }}>{message}</p>}
+
         <div className="button-row" style={{ marginTop: '24px' }}>
           <button onClick={onOpenMyQuestions}>
-            Чат с дворецким
+            Чаты
           </button>
 
-          <button className="secondary" onClick={onAskQuestion}>
-            Задать вопрос
+          <button className="secondary" onClick={handleCopyPublicId} disabled={!profile?.public_id}>
+            Скопировать ID
           </button>
 
           {isOwner && (

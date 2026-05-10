@@ -2,22 +2,15 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const ownerEmail = process.env.OWNER_EMAIL
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }
-}
-
-function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase()
 }
 
 async function getUserFromEvent(event) {
@@ -40,16 +33,6 @@ async function getUserFromEvent(event) {
   return { user }
 }
 
-async function isOwner(user) {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  return ['owner', 'admin'].includes(profile?.role) || normalizeEmail(user.email) === normalizeEmail(ownerEmail)
-}
-
 export const handler = async (event) => {
   try {
     if (event.httpMethod !== 'GET') {
@@ -62,14 +45,32 @@ export const handler = async (event) => {
       return jsonResponse(401, { error: authError })
     }
 
-    if (!(await isOwner(user))) {
-      return jsonResponse(403, { error: 'Доступ разрешён только владельцу.' })
+    const { data: participantRows, error: participantError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, last_read_at')
+      .eq('user_id', user.id)
+
+    if (participantError) {
+      return jsonResponse(500, {
+        error: 'Не удалось загрузить список чатов. Проверьте, что SQL-файл supabase/direct-chats-schema.sql выполнен в Supabase.',
+        details: participantError.message,
+      })
     }
+
+    if (participantRows.length === 0) {
+      return jsonResponse(200, { success: true, conversations: [] })
+    }
+
+    const conversationIds = participantRows.map((row) => row.conversation_id)
+    const lastReadByConversationId = Object.fromEntries(
+      participantRows.map((row) => [row.conversation_id, row.last_read_at])
+    )
 
     const { data: conversations, error: conversationsError } = await supabase
       .from('conversations')
-      .select('id, user_id, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at')
-      .eq('type', 'owner')
+      .select('id, type, direct_key, last_message_at, created_at, updated_at')
+      .eq('type', 'direct')
+      .in('id', conversationIds)
       .order('last_message_at', { ascending: false })
 
     if (conversationsError) {
@@ -80,19 +81,31 @@ export const handler = async (event) => {
     }
 
     if (conversations.length === 0) {
-      return jsonResponse(200, {
-        success: true,
-        conversations: [],
+      return jsonResponse(200, { success: true, conversations: [] })
+    }
+
+    const directIds = conversations.map((conversation) => conversation.id)
+
+    const { data: allParticipants, error: allParticipantsError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, user_id')
+      .in('conversation_id', directIds)
+
+    if (allParticipantsError) {
+      return jsonResponse(500, {
+        error: 'Не удалось загрузить участников.',
+        details: allParticipantsError.message,
       })
     }
 
-    const userIds = [...new Set(conversations.map((conversation) => conversation.user_id))]
-    const conversationIds = conversations.map((conversation) => conversation.id)
+    const otherUserIds = allParticipants
+      .filter((participant) => participant.user_id !== user.id)
+      .map((participant) => participant.user_id)
 
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, email, name, is_important_contact')
-      .in('id', userIds)
+      .select('id, name, public_id')
+      .in('id', otherUserIds)
 
     if (profilesError) {
       return jsonResponse(500, {
@@ -103,8 +116,8 @@ export const handler = async (event) => {
 
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
-      .select('id, conversation_id, sender_role, body, importance, created_at')
-      .in('conversation_id', conversationIds)
+      .select('id, conversation_id, sender_id, sender_role, body, created_at')
+      .in('conversation_id', directIds)
       .order('created_at', { ascending: false })
 
     if (messagesError) {
@@ -116,7 +129,7 @@ export const handler = async (event) => {
 
     const profilesById = Object.fromEntries(profiles.map((profile) => [profile.id, profile]))
     const latestByConversationId = {}
-    const unreadByConversationId = Object.fromEntries(conversationIds.map((id) => [id, 0]))
+    const unreadByConversationId = Object.fromEntries(directIds.map((id) => [id, 0]))
 
     for (const message of messages) {
       if (!latestByConversationId[message.conversation_id]) {
@@ -125,25 +138,40 @@ export const handler = async (event) => {
     }
 
     for (const conversation of conversations) {
-      const lastRead = conversation.owner_last_read_at
-        ? new Date(conversation.owner_last_read_at)
+      const lastRead = lastReadByConversationId[conversation.id]
+        ? new Date(lastReadByConversationId[conversation.id])
         : null
 
       unreadByConversationId[conversation.id] = messages.filter((message) => (
         message.conversation_id === conversation.id
-        && message.sender_role === 'user'
+        && message.sender_id !== user.id
         && (!lastRead || new Date(message.created_at) > lastRead)
       )).length
     }
 
+    const participantByConversationId = {}
+    for (const participant of allParticipants) {
+      if (participant.user_id !== user.id) {
+        participantByConversationId[participant.conversation_id] = participant
+      }
+    }
+
     return jsonResponse(200, {
       success: true,
-      conversations: conversations.map((conversation) => ({
-        ...conversation,
-        user_profile: profilesById[conversation.user_id] || null,
-        last_message: latestByConversationId[conversation.id] || null,
-        unread_count: unreadByConversationId[conversation.id] || 0,
-      })),
+      conversations: conversations.map((conversation) => {
+        const otherParticipant = participantByConversationId[conversation.id]
+        const otherProfile = otherParticipant
+          ? profilesById[otherParticipant.user_id] || null
+          : null
+
+        return {
+          ...conversation,
+          title: otherProfile?.name || `ID ${otherProfile?.public_id || ''}`.trim() || 'Пользователь',
+          other_user: otherProfile,
+          last_message: latestByConversationId[conversation.id] || null,
+          unread_count: unreadByConversationId[conversation.id] || 0,
+        }
+      }),
     })
   } catch (error) {
     return jsonResponse(500, {

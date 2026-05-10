@@ -57,6 +57,7 @@ async function getOrCreateConversation(userId) {
     .from('conversations')
     .select('id')
     .eq('user_id', userId)
+    .eq('type', 'owner')
     .maybeSingle()
 
   if (existingError) {
@@ -69,7 +70,7 @@ async function getOrCreateConversation(userId) {
 
   const { data: created, error: createError } = await supabase
     .from('conversations')
-    .insert({ user_id: userId })
+    .insert({ user_id: userId, type: 'owner' })
     .select('id')
     .single()
 

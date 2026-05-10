@@ -408,7 +408,7 @@ export default function OwnerDashboard({ onBack }) {
 
               {manualId === question.id && (
                 <div className="owner-edit-box">
-                  <h4>Личный ответ владельца</h4>
+                  <h4>Личный ответ Бударина</h4>
                   <label>
                     <strong>Ответ RU</strong>
                   </label>

@@ -8,9 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }
 }
@@ -47,32 +45,45 @@ export const handler = async (event) => {
       return jsonResponse(401, { error: authError })
     }
 
-    const { data: conversation, error: conversationError } = await supabase
-      .from('conversations')
-      .select('id, user_id, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at')
+    const conversationId = event.queryStringParameters?.conversation_id
+
+    if (!conversationId) {
+      return jsonResponse(400, { error: 'Не передан conversation_id.' })
+    }
+
+    const { data: participant, error: participantError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('conversation_id', conversationId)
       .eq('user_id', user.id)
-      .eq('type', 'owner')
       .maybeSingle()
 
-    if (conversationError) {
+    if (participantError) {
       return jsonResponse(500, {
-        error: 'Не удалось загрузить чат.',
-        details: conversationError.message,
+        error: 'Не удалось проверить доступ к чату.',
+        details: participantError.message,
       })
     }
 
-    if (!conversation) {
-      return jsonResponse(200, {
-        success: true,
-        conversation: null,
-        messages: [],
-      })
+    if (!participant) {
+      return jsonResponse(403, { error: 'Нет доступа к этому чату.' })
+    }
+
+    const { data: conversation, error: conversationError } = await supabase
+      .from('conversations')
+      .select('id, type, direct_key, last_message_at, created_at, updated_at')
+      .eq('id', conversationId)
+      .eq('type', 'direct')
+      .single()
+
+    if (conversationError || !conversation) {
+      return jsonResponse(404, { error: 'Чат не найден.' })
     }
 
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
       .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
-      .eq('conversation_id', conversation.id)
+      .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
     if (messagesError) {
@@ -83,9 +94,10 @@ export const handler = async (event) => {
     }
 
     await supabase
-      .from('conversations')
-      .update({ user_last_read_at: new Date().toISOString() })
-      .eq('id', conversation.id)
+      .from('conversation_participants')
+      .update({ last_read_at: new Date().toISOString() })
+      .eq('conversation_id', conversationId)
+      .eq('user_id', user.id)
 
     return jsonResponse(200, {
       success: true,

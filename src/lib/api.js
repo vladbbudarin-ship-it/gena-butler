@@ -113,6 +113,147 @@ export async function getMyChat() {
   return result
 }
 
+export async function getMyProfile() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const response = await fetch('/.netlify/functions/get-my-profile', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось загрузить профиль.'))
+  }
+
+  return result.profile
+}
+
+export async function getDirectChats() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const response = await fetch('/.netlify/functions/get-direct-chats', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось загрузить личные чаты.'))
+  }
+
+  return result.conversations
+}
+
+export async function startDirectChat(publicId) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const response = await fetch('/.netlify/functions/start-direct-chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      public_id: publicId,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось начать чат.'))
+  }
+
+  return result.conversation
+}
+
+export async function getDirectChat(conversationId) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const params = new URLSearchParams({
+    conversation_id: conversationId,
+  })
+
+  const response = await fetch(`/.netlify/functions/get-direct-chat?${params}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось загрузить личный чат.'))
+  }
+
+  return result
+}
+
+export async function sendDirectMessage({
+  conversationId,
+  body,
+}) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const response = await fetch('/.netlify/functions/send-direct-message', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      body,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось отправить сообщение.'))
+  }
+
+  return result
+}
+
 export async function getOwnerChats() {
   const {
     data: { session },

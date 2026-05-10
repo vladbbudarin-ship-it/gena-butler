@@ -8,9 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }
 }
@@ -47,50 +45,28 @@ export const handler = async (event) => {
       return jsonResponse(401, { error: authError })
     }
 
-    const { data: conversation, error: conversationError } = await supabase
-      .from('conversations')
-      .select('id, user_id, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at')
-      .eq('user_id', user.id)
-      .eq('type', 'owner')
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, name, role, public_id')
+      .eq('id', user.id)
       .maybeSingle()
 
-    if (conversationError) {
+    if (profileError) {
       return jsonResponse(500, {
-        error: 'Не удалось загрузить чат.',
-        details: conversationError.message,
+        error: 'Не удалось загрузить профиль. Проверьте, что SQL-файл supabase/direct-chats-schema.sql выполнен в Supabase.',
+        details: profileError.message,
       })
     }
-
-    if (!conversation) {
-      return jsonResponse(200, {
-        success: true,
-        conversation: null,
-        messages: [],
-      })
-    }
-
-    const { data: messages, error: messagesError } = await supabase
-      .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
-      .eq('conversation_id', conversation.id)
-      .order('created_at', { ascending: true })
-
-    if (messagesError) {
-      return jsonResponse(500, {
-        error: 'Не удалось загрузить сообщения.',
-        details: messagesError.message,
-      })
-    }
-
-    await supabase
-      .from('conversations')
-      .update({ user_last_read_at: new Date().toISOString() })
-      .eq('id', conversation.id)
 
     return jsonResponse(200, {
       success: true,
-      conversation,
-      messages,
+      profile: profile || {
+        id: user.id,
+        email: user.email,
+        name: user.user_metadata?.name || null,
+        role: 'user',
+        public_id: null,
+      },
     })
   } catch (error) {
     return jsonResponse(500, {

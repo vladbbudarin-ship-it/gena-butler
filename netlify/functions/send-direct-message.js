@@ -2,22 +2,15 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const ownerEmail = process.env.OWNER_EMAIL
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }
-}
-
-function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase()
 }
 
 async function getUserFromEvent(event) {
@@ -40,19 +33,9 @@ async function getUserFromEvent(event) {
   return { user }
 }
 
-async function isOwner(user) {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  return ['owner', 'admin'].includes(profile?.role) || normalizeEmail(user.email) === normalizeEmail(ownerEmail)
-}
-
 export const handler = async (event) => {
   try {
-    if (event.httpMethod !== 'GET') {
+    if (event.httpMethod !== 'POST') {
       return jsonResponse(405, { error: 'Method not allowed' })
     }
 
@@ -62,58 +45,73 @@ export const handler = async (event) => {
       return jsonResponse(401, { error: authError })
     }
 
-    if (!(await isOwner(user))) {
-      return jsonResponse(403, { error: 'Доступ разрешён только владельцу.' })
-    }
-
-    const conversationId = event.queryStringParameters?.conversation_id
+    const body = JSON.parse(event.body || '{}')
+    const conversationId = body.conversation_id
+    const messageBody = String(body.body || '').trim()
 
     if (!conversationId) {
       return jsonResponse(400, { error: 'Не передан conversation_id.' })
     }
 
-    const { data: conversation, error: conversationError } = await supabase
-      .from('conversations')
-      .select('id, user_id, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at')
-      .eq('id', conversationId)
-      .eq('type', 'owner')
-      .single()
-
-    if (conversationError || !conversation) {
-      return jsonResponse(404, { error: 'Диалог не найден.' })
+    if (!messageBody) {
+      return jsonResponse(400, { error: 'Введите текст сообщения.' })
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, email, name, is_important_contact')
-      .eq('id', conversation.user_id)
+    if (messageBody.length > 3000) {
+      return jsonResponse(400, { error: 'Сообщение слишком длинное. Максимум 3000 символов.' })
+    }
+
+    const { data: participant, error: participantError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', user.id)
       .maybeSingle()
 
-    const { data: messages, error: messagesError } = await supabase
-      .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-
-    if (messagesError) {
+    if (participantError) {
       return jsonResponse(500, {
-        error: 'Не удалось загрузить сообщения.',
-        details: messagesError.message,
+        error: 'Не удалось проверить доступ к чату.',
+        details: participantError.message,
       })
     }
 
-    await supabase
+    if (!participant) {
+      return jsonResponse(403, { error: 'Нет доступа к этому чату.' })
+    }
+
+    const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .update({ owner_last_read_at: new Date().toISOString() })
+      .select('id')
       .eq('id', conversationId)
+      .eq('type', 'direct')
+      .single()
+
+    if (conversationError || !conversation) {
+      return jsonResponse(404, { error: 'Чат не найден.' })
+    }
+
+    const { data: message, error: messageError } = await supabase
+      .from('chat_messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        sender_role: 'user',
+        body: messageBody,
+        importance: 'normal',
+      })
+      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
+      .single()
+
+    if (messageError) {
+      return jsonResponse(500, {
+        error: 'Не удалось отправить сообщение.',
+        details: messageError.message,
+      })
+    }
 
     return jsonResponse(200, {
       success: true,
-      conversation: {
-        ...conversation,
-        user_profile: profile || null,
-      },
-      messages,
+      message,
     })
   } catch (error) {
     return jsonResponse(500, {
