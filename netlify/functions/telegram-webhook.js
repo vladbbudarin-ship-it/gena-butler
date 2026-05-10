@@ -313,7 +313,6 @@ async function saveUrgentQuestion({ chatId, message, profile, text, urgencyLevel
     return
   }
 
-  })
 
   await sendTelegramMessage(chatId, 'Сообщение принято.', {
     reply_markup: mainMenuKeyboard({
