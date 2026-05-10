@@ -16,6 +16,33 @@ function jsonResponse(statusCode, body) {
   }
 }
 
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /column|schema cache/i.test(error?.message || '')
+}
+
+async function loadLatestMessages(conversationIds) {
+  const withDeleteFields = await supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_role, body, importance, created_at, deleted_at, deleted_by')
+    .in('conversation_id', conversationIds)
+    .order('created_at', { ascending: false })
+
+  if (!withDeleteFields.error) {
+    return withDeleteFields
+  }
+
+  if (!isMissingSchemaColumn(withDeleteFields.error)) {
+    return withDeleteFields
+  }
+
+  return supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_role, body, importance, created_at')
+    .in('conversation_id', conversationIds)
+    .order('created_at', { ascending: false })
+}
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase()
 }
@@ -101,11 +128,7 @@ export const handler = async (event) => {
       })
     }
 
-    const { data: messages, error: messagesError } = await supabase
-      .from('chat_messages')
-      .select('id, conversation_id, sender_role, body, importance, created_at, deleted_at, deleted_by')
-      .in('conversation_id', conversationIds)
-      .order('created_at', { ascending: false })
+    const { data: messages, error: messagesError } = await loadLatestMessages(conversationIds)
 
     if (messagesError) {
       return jsonResponse(500, {

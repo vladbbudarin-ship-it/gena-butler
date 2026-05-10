@@ -217,7 +217,6 @@ async function sendMainMenu(chatId, profile) {
     reply_markup: mainMenuKeyboard({
       isOwner: isOwnerProfile(profile),
     }),
-  })
 }
 
 async function handleStartLink({ chatId, from, code }) {
@@ -279,7 +278,6 @@ async function handleStartLink({ chatId, from, code }) {
     ...profile,
     telegram_user_id: from.id,
     telegram_username: getTelegramUsername(from),
-  })
 }
 
 async function saveNormalDialogMessage({ chatId, profile, text }) {
@@ -297,12 +295,6 @@ async function saveNormalDialogMessage({ chatId, profile, text }) {
     return
   }
 
-  await notifyTelegramOwnersAboutQuestion({
-    senderProfile: profile,
-    senderTelegramUserId: profile.telegram_user_id,
-    text,
-    finalImportance: result.final_importance || 'low',
-  })
 }
 
 async function saveUrgentQuestion({ chatId, message, profile, text, urgencyLevel }) {
@@ -321,11 +313,6 @@ async function saveUrgentQuestion({ chatId, message, profile, text, urgencyLevel
     return
   }
 
-  await notifyTelegramOwnersAboutQuestion({
-    senderProfile: profile,
-    senderTelegramUserId: profile.telegram_user_id,
-    text,
-    finalImportance: result.final_importance || 'low',
   })
 
   await sendTelegramMessage(chatId, 'Сообщение принято.', {

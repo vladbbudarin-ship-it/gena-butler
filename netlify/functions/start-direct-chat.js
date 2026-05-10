@@ -116,12 +116,23 @@ export const handler = async (event) => {
       conversation = created
     }
 
-    const { error: participantsError } = await supabase
+    let { error: participantsError } = await supabase
       .from('conversation_participants')
       .upsert([
         { conversation_id: conversation.id, user_id: user.id, deleted_at: null },
         { conversation_id: conversation.id, user_id: targetProfile.id },
       ], { onConflict: 'conversation_id,user_id' })
+
+    if (participantsError && /column|schema cache/i.test(participantsError.message || '')) {
+      const fallback = await supabase
+        .from('conversation_participants')
+        .upsert([
+          { conversation_id: conversation.id, user_id: user.id },
+          { conversation_id: conversation.id, user_id: targetProfile.id },
+        ], { onConflict: 'conversation_id,user_id' })
+
+      participantsError = fallback.error
+    }
 
     if (participantsError) {
       return jsonResponse(500, {

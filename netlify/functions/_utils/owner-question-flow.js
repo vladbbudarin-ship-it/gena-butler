@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { notifyOwnerAboutIncomingMessage } from './owner-notifications.js'
 
 const openaiApiKey = process.env.OPENAI_API_KEY
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini'
@@ -319,7 +320,7 @@ export async function createOwnerQuestionFromUser({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('is_important_contact')
+    .select('id, email, name, role, public_id, telegram_user_id, telegram_username, is_important_contact')
     .eq('id', userId)
     .maybeSingle()
 
@@ -419,6 +420,17 @@ export async function createOwnerQuestionFromUser({
       },
     })
 
+    await notifyOwnerAboutIncomingMessage({
+      supabase,
+      senderProfile: profile,
+      messageText: normalizedQuestionText,
+      source: sourceChannel,
+      conversationId: conversation.id,
+      questionId,
+      finalImportance,
+      urgencyLevel,
+    })
+
     return {
       success: true,
       conversation,
@@ -438,6 +450,17 @@ export async function createOwnerQuestionFromUser({
         ai_error_message: aiError.message,
       })
       .eq('id', questionId)
+
+    await notifyOwnerAboutIncomingMessage({
+      supabase,
+      senderProfile: profile,
+      messageText: normalizedQuestionText,
+      source: sourceChannel,
+      conversationId: conversation.id,
+      questionId,
+      finalImportance: null,
+      urgencyLevel,
+    })
 
     return {
       success: true,

@@ -99,7 +99,7 @@ export const handler = async (event) => {
         body: messageBody,
         importance: 'normal',
       })
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at, deleted_at, deleted_by')
+      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
       .single()
 
     if (messageError) {
@@ -109,10 +109,17 @@ export const handler = async (event) => {
       })
     }
 
-    await supabase
+    const { error: restoreError } = await supabase
       .from('conversation_participants')
       .update({ deleted_at: null })
       .eq('conversation_id', conversationId)
+
+    if (restoreError && !/column|schema cache/i.test(restoreError.message || '')) {
+      return jsonResponse(500, {
+        error: 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ СЃРѕСЃС‚РѕСЏРЅРёРµ С‡Р°С‚Р°.',
+        details: restoreError.message,
+      })
+    }
 
     return jsonResponse(200, {
       success: true,

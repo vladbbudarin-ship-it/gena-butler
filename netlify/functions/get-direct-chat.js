@@ -13,6 +13,58 @@ function jsonResponse(statusCode, body) {
   }
 }
 
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /column|schema cache/i.test(error?.message || '')
+}
+
+async function loadParticipant({ conversationId, userId }) {
+  const withDeleteFields = await supabase
+    .from('conversation_participants')
+    .select('conversation_id, deleted_at')
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (!withDeleteFields.error) {
+    return withDeleteFields
+  }
+
+  if (!isMissingSchemaColumn(withDeleteFields.error)) {
+    return withDeleteFields
+  }
+
+  return supabase
+    .from('conversation_participants')
+    .select('conversation_id')
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
+    .maybeSingle()
+}
+
+async function loadMessages(conversationId) {
+  const withDeleteFields = await supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at, deleted_at, deleted_by')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+
+  if (!withDeleteFields.error) {
+    return withDeleteFields
+  }
+
+  if (!isMissingSchemaColumn(withDeleteFields.error)) {
+    return withDeleteFields
+  }
+
+  return supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+}
+
 async function getUserFromEvent(event) {
   const authHeader = event.headers.authorization || event.headers.Authorization
 
@@ -51,13 +103,10 @@ export const handler = async (event) => {
       return jsonResponse(400, { error: 'Не передан conversation_id.' })
     }
 
-    const { data: participant, error: participantError } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id, deleted_at')
-      .eq('conversation_id', conversationId)
-      .eq('user_id', user.id)
-      .is('deleted_at', null)
-      .maybeSingle()
+    const { data: participant, error: participantError } = await loadParticipant({
+      conversationId,
+      userId: user.id,
+    })
 
     if (participantError) {
       return jsonResponse(500, {
@@ -81,11 +130,7 @@ export const handler = async (event) => {
       return jsonResponse(404, { error: 'Чат не найден.' })
     }
 
-    const { data: messages, error: messagesError } = await supabase
-      .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at, deleted_at, deleted_by')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
+    const { data: messages, error: messagesError } = await loadMessages(conversationId)
 
     if (messagesError) {
       return jsonResponse(500, {

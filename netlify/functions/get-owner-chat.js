@@ -16,6 +16,33 @@ function jsonResponse(statusCode, body) {
   }
 }
 
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /column|schema cache/i.test(error?.message || '')
+}
+
+async function loadChatMessages(conversationId) {
+  const withDeleteFields = await supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, source_question_id, created_at, deleted_at, deleted_by')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+
+  if (!withDeleteFields.error) {
+    return withDeleteFields
+  }
+
+  if (!isMissingSchemaColumn(withDeleteFields.error)) {
+    return withDeleteFields
+  }
+
+  return supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, source_question_id, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+}
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase()
 }
@@ -126,11 +153,7 @@ export const handler = async (event) => {
       .eq('id', conversation.user_id)
       .maybeSingle()
 
-    const { data: messages, error: messagesError } = await supabase
-      .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, source_question_id, created_at, deleted_at, deleted_by')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
+    const { data: messages, error: messagesError } = await loadChatMessages(conversationId)
 
     if (messagesError) {
       return jsonResponse(500, {

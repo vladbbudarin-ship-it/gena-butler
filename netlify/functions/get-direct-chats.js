@@ -13,6 +13,54 @@ function jsonResponse(statusCode, body) {
   }
 }
 
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /column|schema cache/i.test(error?.message || '')
+}
+
+async function loadMyParticipants(userId) {
+  const withDeleteFields = await supabase
+    .from('conversation_participants')
+    .select('conversation_id, last_read_at, deleted_at')
+    .eq('user_id', userId)
+    .is('deleted_at', null)
+
+  if (!withDeleteFields.error) {
+    return withDeleteFields
+  }
+
+  if (!isMissingSchemaColumn(withDeleteFields.error)) {
+    return withDeleteFields
+  }
+
+  return supabase
+    .from('conversation_participants')
+    .select('conversation_id, last_read_at')
+    .eq('user_id', userId)
+}
+
+async function loadLatestMessages(directIds) {
+  const withDeleteFields = await supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_id, sender_role, body, created_at, deleted_at, deleted_by')
+    .in('conversation_id', directIds)
+    .order('created_at', { ascending: false })
+
+  if (!withDeleteFields.error) {
+    return withDeleteFields
+  }
+
+  if (!isMissingSchemaColumn(withDeleteFields.error)) {
+    return withDeleteFields
+  }
+
+  return supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_id, sender_role, body, created_at')
+    .in('conversation_id', directIds)
+    .order('created_at', { ascending: false })
+}
+
 async function getUserFromEvent(event) {
   const authHeader = event.headers.authorization || event.headers.Authorization
 
@@ -45,11 +93,7 @@ export const handler = async (event) => {
       return jsonResponse(401, { error: authError })
     }
 
-    const { data: participantRows, error: participantError } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id, last_read_at, deleted_at')
-      .eq('user_id', user.id)
-      .is('deleted_at', null)
+    const { data: participantRows, error: participantError } = await loadMyParticipants(user.id)
 
     if (participantError) {
       return jsonResponse(500, {
@@ -113,11 +157,7 @@ export const handler = async (event) => {
       })
     }
 
-    const { data: messages, error: messagesError } = await supabase
-      .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, created_at, deleted_at, deleted_by')
-      .in('conversation_id', directIds)
-      .order('created_at', { ascending: false })
+    const { data: messages, error: messagesError } = await loadLatestMessages(directIds)
 
     if (messagesError) {
       return jsonResponse(500, {
