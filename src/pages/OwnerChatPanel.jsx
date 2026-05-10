@@ -44,15 +44,7 @@ function getFinalImportanceLabel(importance) {
 }
 
 function getFinalImportanceBadgeClass(importance) {
-  if (importance === 'high') {
-    return 'badge red'
-  }
-
-  if (importance === 'medium') {
-    return 'badge dark'
-  }
-
-  return 'badge'
+  return `importance-badge importance-${importance || 'none'}`
 }
 
 function resizeComposerTextarea(textarea) {

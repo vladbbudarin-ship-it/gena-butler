@@ -465,6 +465,46 @@ button.icon {
   color: var(--danger);
 }
 
+.importance-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  background: #f3f4f6;
+  color: #111111;
+  border: 1px solid #d1d5db;
+}
+
+.importance-high {
+  background: #e11d48;
+  color: #ffffff;
+  border-color: #e11d48;
+}
+
+.importance-medium {
+  background: #166534;
+  color: #ffffff;
+  border-color: #166534;
+}
+
+.importance-low {
+  background: #ffffff;
+  color: #111111;
+  border-color: #111111;
+}
+
+.importance-none {
+  background: #f3f4f6;
+  color: #111111;
+  border-color: #d1d5db;
+}
+
 .question-grid {
   display: grid;
   gap: 16px;
@@ -706,7 +746,6 @@ button.icon {
 }
 
 .message-badge {
-  width: fit-content;
   margin-top: 12px;
 }
 

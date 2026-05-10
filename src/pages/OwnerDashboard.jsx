@@ -39,6 +39,10 @@ function getImportanceLabel(importance) {
   return importanceLabels[importance] || 'Пока нет'
 }
 
+function getImportanceBadgeClass(importance) {
+  return `importance-badge importance-${importance || 'none'}`
+}
+
 function getBadgeClass(value) {
   if (value === 'urgent' || value === 'high' || value === 'ai_error') {
     return 'badge red'
@@ -247,7 +251,7 @@ export default function OwnerDashboard({ onBack }) {
                   <span className={getBadgeClass(question.urgency_level)}>
                     {getUrgencyLabel(question.urgency_level)}
                   </span>
-                  <span className={getBadgeClass(question.final_importance)}>
+                  <span className={getImportanceBadgeClass(question.final_importance)}>
                     Итоговая важность: {getImportanceLabel(question.final_importance)}
                   </span>
                   <span className={getBadgeClass(question.status)}>
