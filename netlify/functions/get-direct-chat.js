@@ -93,6 +93,39 @@ export const handler = async (event) => {
       })
     }
 
+    const { data: participants, error: participantsError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, user_id')
+      .eq('conversation_id', conversationId)
+
+    if (participantsError) {
+      return jsonResponse(500, {
+        error: 'Не удалось загрузить участников чата.',
+        details: participantsError.message,
+      })
+    }
+
+    const participantUserIds = [...new Set(participants.map((row) => row.user_id))]
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, name, public_id')
+      .in('id', participantUserIds)
+
+    if (profilesError) {
+      return jsonResponse(500, {
+        error: 'Не удалось загрузить профили участников.',
+        details: profilesError.message,
+      })
+    }
+
+    const profilesById = Object.fromEntries(profiles.map((profile) => [profile.id, profile]))
+    const members = participants.map((row) => ({
+      ...row,
+      profile: profilesById[row.user_id] || null,
+    }))
+    const otherMember = members.find((member) => member.user_id !== user.id)
+    const otherUser = otherMember?.profile || null
+
     await supabase
       .from('conversation_participants')
       .update({ last_read_at: new Date().toISOString() })
@@ -101,7 +134,12 @@ export const handler = async (event) => {
 
     return jsonResponse(200, {
       success: true,
-      conversation,
+      conversation: {
+        ...conversation,
+        members,
+        title: otherUser?.name || otherUser?.public_id || 'Пользователь',
+        other_user: otherUser,
+      },
       messages,
     })
   } catch (error) {

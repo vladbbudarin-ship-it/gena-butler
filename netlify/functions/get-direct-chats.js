@@ -98,14 +98,12 @@ export const handler = async (event) => {
       })
     }
 
-    const otherUserIds = allParticipants
-      .filter((participant) => participant.user_id !== user.id)
-      .map((participant) => participant.user_id)
+    const participantUserIds = [...new Set(allParticipants.map((participant) => participant.user_id))]
 
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('id, name, public_id')
-      .in('id', otherUserIds)
+      .in('id', participantUserIds)
 
     if (profilesError) {
       return jsonResponse(500, {
@@ -159,6 +157,12 @@ export const handler = async (event) => {
     return jsonResponse(200, {
       success: true,
       conversations: conversations.map((conversation) => {
+        const participants = allParticipants
+          .filter((participant) => participant.conversation_id === conversation.id)
+          .map((participant) => ({
+            ...participant,
+            profile: profilesById[participant.user_id] || null,
+          }))
         const otherParticipant = participantByConversationId[conversation.id]
         const otherProfile = otherParticipant
           ? profilesById[otherParticipant.user_id] || null
@@ -166,7 +170,8 @@ export const handler = async (event) => {
 
         return {
           ...conversation,
-          title: otherProfile?.name || `ID ${otherProfile?.public_id || ''}`.trim() || 'Пользователь',
+          members: participants,
+          title: otherProfile?.name || otherProfile?.public_id || 'Пользователь',
           other_user: otherProfile,
           last_message: latestByConversationId[conversation.id] || null,
           unread_count: unreadByConversationId[conversation.id] || 0,

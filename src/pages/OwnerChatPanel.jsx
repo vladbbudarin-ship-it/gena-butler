@@ -56,6 +56,26 @@ function resizeComposerTextarea(textarea) {
   textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`
 }
 
+function isNearBottom(element) {
+  if (!element) {
+    return true
+  }
+
+  return element.scrollHeight - element.scrollTop - element.clientHeight < 96
+}
+
+function scrollToBottom(element) {
+  if (!element) {
+    return
+  }
+
+  element.scrollTop = element.scrollHeight
+}
+
+function getProfileTitle(profile) {
+  return profile?.name || profile?.public_id || 'Пользователь'
+}
+
 function getConversationClass(conversation, isSelected) {
   const parts = ['chat-list-item']
 
@@ -77,31 +97,46 @@ export default function OwnerChatPanel() {
   const [loadingChat, setLoadingChat] = useState(false)
   const [sending, setSending] = useState(false)
   const replyTextareaRef = useRef(null)
+  const chatScrollRef = useRef(null)
+  const selectedConversationIdRef = useRef(selectedConversationId)
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
     [messages]
   )
 
-  const loadConversations = useCallback(async () => {
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId
+  }, [selectedConversationId])
+
+  const loadConversations = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoadingList(true)
-      setMessage('')
+      if (!silent) {
+        setLoadingList(true)
+        setMessage('')
+      }
 
       const data = await getOwnerChats()
       setConversations(data)
 
-      if (!selectedConversationId && data.length > 0) {
+      if (!selectedConversationIdRef.current && data.length > 0) {
         setSelectedConversationId(data[0].id)
       }
     } catch (error) {
-      setMessage(error.message)
+      if (!silent) {
+        setMessage(error.message)
+      }
     } finally {
-      setLoadingList(false)
+      if (!silent) {
+        setLoadingList(false)
+      }
     }
-  }, [selectedConversationId])
+  }, [])
 
-  const loadSelectedConversation = useCallback(async (conversationId = selectedConversationId) => {
+  const loadSelectedConversation = useCallback(async (
+    conversationId = selectedConversationIdRef.current,
+    { silent = false } = {}
+  ) => {
     if (!conversationId) {
       setSelectedConversation(null)
       setMessages([])
@@ -109,22 +144,32 @@ export default function OwnerChatPanel() {
     }
 
     try {
-      setLoadingChat(true)
-      setMessage('')
+      if (!silent) {
+        setLoadingChat(true)
+        setMessage('')
+      }
 
+      const shouldScrollToBottom = isNearBottom(chatScrollRef.current)
       const data = await getOwnerChat(conversationId)
       setSelectedConversation(data.conversation)
       setMessages(data.messages || [])
+      if (shouldScrollToBottom) {
+        requestAnimationFrame(() => scrollToBottom(chatScrollRef.current))
+      }
     } catch (error) {
-      setMessage(error.message)
+      if (!silent) {
+        setMessage(error.message)
+      }
     } finally {
-      setLoadingChat(false)
+      if (!silent) {
+        setLoadingChat(false)
+      }
     }
-  }, [selectedConversationId])
+  }, [])
 
   async function refreshCurrentChat() {
-    await loadSelectedConversation()
-    await loadConversations()
+    await loadSelectedConversation(selectedConversationIdRef.current, { silent: true })
+    await loadConversations({ silent: true })
   }
 
   async function handleSend(event) {
@@ -144,14 +189,13 @@ export default function OwnerChatPanel() {
     try {
       setSending(true)
 
-      const result = await sendChatMessage({
+      await sendChatMessage({
         conversationId: selectedConversationId,
         senderRole: 'owner',
         body: replyText,
         importance: 'normal',
       })
 
-      setMessages((currentMessages) => [...currentMessages, result.message])
       setReplyText('')
       resizeComposerTextarea(replyTextareaRef.current)
       await refreshCurrentChat()
@@ -188,6 +232,26 @@ export default function OwnerChatPanel() {
     loadSelectedConversation(selectedConversationId)
   }, [loadSelectedConversation, selectedConversationId])
 
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadConversations({ silent: true }).catch(() => {})
+    }, 5000)
+
+    return () => clearInterval(intervalId)
+  }, [loadConversations])
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      return undefined
+    }
+
+    const intervalId = setInterval(() => {
+      loadSelectedConversation(selectedConversationId, { silent: true }).catch(() => {})
+    }, 3000)
+
+    return () => clearInterval(intervalId)
+  }, [selectedConversationId, loadSelectedConversation])
+
   return (
     <section className="hero-card">
       <div className="owner-chat-shell">
@@ -216,8 +280,8 @@ export default function OwnerChatPanel() {
                 >
                   <span className="mini-avatar" />
                   <span className="chat-list-copy">
-                    <strong>{profile.name || 'Без имени'}</strong>
-                    <span>{profile.email || 'email не найден'}</span>
+                    <strong>{getProfileTitle(profile)}</strong>
+                    {profile.email && <span>{profile.email}</span>}
                     {conversation.last_message && (
                       <small>
                         {conversation.last_message.body}
@@ -237,7 +301,7 @@ export default function OwnerChatPanel() {
           <div className="chat-topbar">
             <div>
               <h3>
-                {selectedConversation?.user_profile?.name || 'Собеседник'}
+                {getProfileTitle(selectedConversation?.user_profile)}
               </h3>
               {selectedConversation?.user_profile?.email && (
                 <p>{selectedConversation.user_profile.email}</p>
@@ -251,7 +315,7 @@ export default function OwnerChatPanel() {
             </div>
           </div>
 
-          <div className="chat-scroll">
+          <div className="chat-scroll" ref={chatScrollRef}>
             {message && <p className="notice danger">{message}</p>}
             {loadingChat && <p>Загрузка чата...</p>}
 

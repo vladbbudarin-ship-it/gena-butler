@@ -262,11 +262,13 @@ export default function OwnerDashboard({ onBack }) {
 
               <div className="question-meta">
                 <span className="badge">
-                  {question.user_profile?.name || 'Без имени'}
+                  {question.user_profile?.name || question.user_profile?.public_id || 'Пользователь'}
                 </span>
-                <span className="badge">
-                  {question.user_profile?.email || 'email не найден'}
-                </span>
+                {question.user_profile?.email && (
+                  <span className="badge">
+                    {question.user_profile.email}
+                  </span>
+                )}
                 <span className={question.user_profile?.is_important_contact ? 'badge dark' : 'badge'}>
                   Важный контакт: {question.user_profile?.is_important_contact ? 'Да' : 'Нет'}
                 </span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getDirectChat,
   getDirectChats,
@@ -62,6 +62,29 @@ function resizeComposerTextarea(textarea) {
   textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`
 }
 
+function isNearBottom(element) {
+  if (!element) {
+    return true
+  }
+
+  return element.scrollHeight - element.scrollTop - element.clientHeight < 96
+}
+
+function scrollToBottom(element) {
+  if (!element) {
+    return
+  }
+
+  element.scrollTop = element.scrollHeight
+}
+
+function getDirectChatTitle(conversation) {
+  return conversation?.other_user?.name
+    || conversation?.other_user?.public_id
+    || conversation?.title
+    || 'Пользователь'
+}
+
 export default function MyQuestions({ onBack }) {
   const [profile, setProfile] = useState(null)
   const [ownerConversation, setOwnerConversation] = useState(null)
@@ -76,6 +99,8 @@ export default function MyQuestions({ onBack }) {
   const [sending, setSending] = useState(false)
   const [startingChat, setStartingChat] = useState(false)
   const messageTextareaRef = useRef(null)
+  const chatScrollRef = useRef(null)
+  const selectedChatRef = useRef(selectedChat)
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
@@ -94,7 +119,7 @@ export default function MyQuestions({ onBack }) {
     ...directConversations.map((conversation) => ({
       id: conversation.id,
       type: 'direct',
-      title: conversation.title || 'Собеседник',
+      title: getDirectChatTitle(conversation),
       subtitle: conversation.other_user?.public_id ? `ID ${conversation.other_user.public_id}` : 'Личный чат',
       unread_count: conversation.unread_count || 0,
       last_message: conversation.last_message || null,
@@ -106,9 +131,17 @@ export default function MyQuestions({ onBack }) {
   )
   const activeChatTitle = selectedChat.type === 'owner'
     ? 'Бударин'
-    : activeChatItem?.title || 'Собеседник'
+    : activeChatItem?.title || 'Пользователь'
 
-  async function loadChatList() {
+  useEffect(() => {
+    selectedChatRef.current = selectedChat
+  }, [selectedChat])
+
+  const loadChatList = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setStatusMessage('')
+    }
+
     const [profileData, ownerData, directData] = await Promise.all([
       getMyProfile(),
       getMyChat(),
@@ -118,33 +151,83 @@ export default function MyQuestions({ onBack }) {
     setProfile(profileData)
     setOwnerConversation(ownerData.conversation)
     setDirectConversations(directData)
-  }
+  }, [])
 
-  async function loadSelectedChat(chat = selectedChat) {
+  const loadSelectedChat = useCallback(async (
+    chat = selectedChatRef.current,
+    { silent = false } = {}
+  ) => {
+    if (!chat) {
+      return
+    }
+
+    if (!silent) {
+      setLoading(true)
+      setStatusMessage('')
+    }
+
+    const shouldScrollToBottom = isNearBottom(chatScrollRef.current)
+
     if (chat.type === 'owner') {
       const data = await getMyChat()
       setOwnerConversation(data.conversation)
       setMessages(data.messages || [])
+      if (shouldScrollToBottom) {
+        requestAnimationFrame(() => scrollToBottom(chatScrollRef.current))
+      }
+      if (!silent) {
+        setLoading(false)
+      }
       return
     }
 
     const data = await getDirectChat(chat.id)
+    if (data.conversation) {
+      setDirectConversations((current) => {
+        const exists = current.some((conversation) => conversation.id === data.conversation.id)
+
+        if (!exists) {
+          return [data.conversation, ...current]
+        }
+
+        return current.map((conversation) => (
+          conversation.id === data.conversation.id
+            ? { ...conversation, ...data.conversation }
+            : conversation
+        ))
+      })
+    }
     setMessages(data.messages || [])
-  }
-
-  async function refreshAll(chat = selectedChat) {
-    try {
-      setLoading(true)
-      setStatusMessage('')
-
-      await loadChatList()
-      await loadSelectedChat(chat)
-    } catch (error) {
-      setStatusMessage(error.message)
-    } finally {
+    if (shouldScrollToBottom) {
+      requestAnimationFrame(() => scrollToBottom(chatScrollRef.current))
+    }
+    if (!silent) {
       setLoading(false)
     }
-  }
+  }, [])
+
+  const refreshAll = useCallback(async (
+    chat = selectedChatRef.current,
+    { silent = false } = {}
+  ) => {
+    try {
+      if (!silent) {
+        setLoading(true)
+        setStatusMessage('')
+      }
+
+      await loadChatList({ silent })
+      await loadSelectedChat(chat, { silent: true })
+    } catch (error) {
+      if (!silent) {
+        setStatusMessage(error.message)
+      }
+    } finally {
+      if (!silent) {
+        setLoading(false)
+      }
+    }
+  }, [loadChatList, loadSelectedChat])
 
   async function handleStartDirectChat(event) {
     event.preventDefault()
@@ -156,6 +239,7 @@ export default function MyQuestions({ onBack }) {
       const conversation = await startDirectChat(publicIdInput)
       setPublicIdInput('')
       setSelectedChat({ type: 'direct', id: conversation.id })
+      await loadChatList({ silent: true })
       await refreshAll({ type: 'direct', id: conversation.id })
     } catch (error) {
       setStatusMessage(error.message)
@@ -189,15 +273,15 @@ export default function MyQuestions({ onBack }) {
         return
       }
 
-      const result = await sendDirectMessage({
+      await sendDirectMessage({
         conversationId: selectedChat.id,
         body: messageText,
       })
 
-      setMessages((currentMessages) => [...currentMessages, result.message])
       setMessageText('')
       resizeComposerTextarea(messageTextareaRef.current)
-      await refreshAll(selectedChat)
+      await loadSelectedChat(selectedChatRef.current, { silent: true })
+      await loadChatList({ silent: true })
     } catch (error) {
       setStatusMessage(error.message)
     } finally {
@@ -225,9 +309,28 @@ export default function MyQuestions({ onBack }) {
 
   useEffect(() => {
     refreshAll({ type: 'owner', id: 'owner' })
-    // The initial load should run once; refreshAll depends on active state by design.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [refreshAll])
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadChatList({ silent: true }).catch(() => {})
+    }, 5000)
+
+    return () => clearInterval(intervalId)
+  }, [loadChatList])
+
+  useEffect(() => {
+    loadSelectedChat(selectedChat, { silent: false }).catch((error) => {
+      setStatusMessage(error.message)
+      setLoading(false)
+    })
+
+    const intervalId = setInterval(() => {
+      loadSelectedChat(selectedChat, { silent: true }).catch(() => {})
+    }, 3000)
+
+    return () => clearInterval(intervalId)
+  }, [selectedChat, loadSelectedChat])
 
   return (
     <div className="page-stack chat-page">
@@ -259,7 +362,6 @@ export default function MyQuestions({ onBack }) {
                     onClick={() => {
                       const nextChat = { type: chat.type, id: chat.id }
                       setSelectedChat(nextChat)
-                      loadSelectedChat(nextChat)
                     }}
                   >
                     <span className="mini-avatar" />
@@ -281,7 +383,7 @@ export default function MyQuestions({ onBack }) {
           <div className="chat-main">
             <div className="chat-topbar">
               <div>
-                <h3>{activeChatTitle || 'Без имени'}</h3>
+                <h3>{activeChatTitle || 'Пользователь'}</h3>
                 {selectedChat.type === 'direct' && activeChatItem?.subtitle && (
                   <p>{activeChatItem.subtitle}</p>
                 )}
@@ -297,7 +399,7 @@ export default function MyQuestions({ onBack }) {
               </div>
             </div>
 
-            <div className="chat-scroll">
+            <div className="chat-scroll" ref={chatScrollRef}>
               {statusMessage && <p className="notice danger">{statusMessage}</p>}
               {loading && <p className="status-message">Загрузка чата...</p>}
 
