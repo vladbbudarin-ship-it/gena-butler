@@ -35,6 +35,43 @@ async function getUserFromEvent(event) {
   return { user }
 }
 
+async function attachFinalImportance(messages) {
+  const questionIds = [
+    ...new Set(
+      messages
+        .map((message) => message.source_question_id)
+        .filter(Boolean)
+    ),
+  ]
+
+  if (questionIds.length === 0) {
+    return messages.map((message) => ({
+      ...message,
+      final_importance: null,
+    }))
+  }
+
+  const { data: questions, error } = await supabase
+    .from('questions')
+    .select('id, final_importance')
+    .in('id', questionIds)
+
+  if (error) {
+    throw error
+  }
+
+  const importanceByQuestionId = Object.fromEntries(
+    questions.map((question) => [question.id, question.final_importance])
+  )
+
+  return messages.map((message) => ({
+    ...message,
+    final_importance: message.source_question_id
+      ? importanceByQuestionId[message.source_question_id] || null
+      : null,
+  }))
+}
+
 export const handler = async (event) => {
   try {
     if (event.httpMethod !== 'GET') {
@@ -71,7 +108,7 @@ export const handler = async (event) => {
 
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
+      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, source_question_id, created_at')
       .eq('conversation_id', conversation.id)
       .order('created_at', { ascending: true })
 
@@ -82,6 +119,8 @@ export const handler = async (event) => {
       })
     }
 
+    const messagesWithImportance = await attachFinalImportance(messages || [])
+
     await supabase
       .from('conversations')
       .update({ user_last_read_at: new Date().toISOString() })
@@ -90,7 +129,7 @@ export const handler = async (event) => {
     return jsonResponse(200, {
       success: true,
       conversation,
-      messages,
+      messages: messagesWithImportance,
     })
   } catch (error) {
     return jsonResponse(500, {

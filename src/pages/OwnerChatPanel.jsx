@@ -7,6 +7,12 @@ const roleLabels = {
   ai: 'AI',
 }
 
+const finalImportanceLabels = {
+  low: 'Низкая',
+  medium: 'Средняя',
+  high: 'Высокая',
+}
+
 function formatTime(value) {
   if (!value) {
     return ''
@@ -31,6 +37,22 @@ function getBubbleClass(role) {
   }
 
   return 'message-bubble incoming'
+}
+
+function getFinalImportanceLabel(importance) {
+  return finalImportanceLabels[importance] || 'Пока нет'
+}
+
+function getFinalImportanceBadgeClass(importance) {
+  if (importance === 'high') {
+    return 'badge red'
+  }
+
+  if (importance === 'medium') {
+    return 'badge dark'
+  }
+
+  return 'badge'
 }
 
 function resizeComposerTextarea(textarea) {
@@ -256,6 +278,12 @@ export default function OwnerChatPanel() {
                       <div>
                         {chatMessage.body}
                       </div>
+
+                      {chatMessage.sender_role === 'user' && (
+                        <span className={`message-badge ${getFinalImportanceBadgeClass(chatMessage.final_importance)}`}>
+                          Итоговая важность: {getFinalImportanceLabel(chatMessage.final_importance)}
+                        </span>
+                      )}
 
                       {chatMessage.body_zh && (
                         <div style={{ marginTop: '10px' }}>

@@ -15,6 +15,12 @@ const urgencyLabels = {
   urgent: 'Срочный',
 }
 
+const finalImportanceLabels = {
+  low: 'Низкая',
+  medium: 'Средняя',
+  high: 'Высокая',
+}
+
 const roleLabels = {
   user: 'Вы',
   owner: 'Бударин',
@@ -51,6 +57,22 @@ function getMessageBubbleClass(message, selectedChat, profile) {
   return message.sender_id === profile?.id
     ? 'message-bubble outgoing'
     : 'message-bubble incoming'
+}
+
+function getFinalImportanceLabel(importance) {
+  return finalImportanceLabels[importance] || 'Пока нет'
+}
+
+function getFinalImportanceBadgeClass(importance) {
+  if (importance === 'high') {
+    return 'badge red'
+  }
+
+  if (importance === 'medium') {
+    return 'badge dark'
+  }
+
+  return 'badge'
 }
 
 function resizeComposerTextarea(textarea) {
@@ -320,6 +342,12 @@ export default function MyQuestions({ onBack }) {
                     <div>
                       {message.body}
                     </div>
+
+                    {selectedChat.type === 'owner' && message.sender_role === 'user' && (
+                      <span className={`message-badge ${getFinalImportanceBadgeClass(message.final_importance)}`}>
+                        Итоговая важность: {getFinalImportanceLabel(message.final_importance)}
+                      </span>
+                    )}
 
                     {message.body_zh && (
                       <div style={{ marginTop: '10px' }}>

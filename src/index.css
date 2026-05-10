@@ -705,6 +705,11 @@ button.icon {
   color: #cfcfcf;
 }
 
+.message-badge {
+  width: fit-content;
+  margin-top: 12px;
+}
+
 .composer {
   display: grid;
   gap: 12px;
