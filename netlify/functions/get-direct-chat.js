@@ -53,9 +53,10 @@ export const handler = async (event) => {
 
     const { data: participant, error: participantError } = await supabase
       .from('conversation_participants')
-      .select('conversation_id')
+      .select('conversation_id, deleted_at')
       .eq('conversation_id', conversationId)
       .eq('user_id', user.id)
+      .is('deleted_at', null)
       .maybeSingle()
 
     if (participantError) {
@@ -82,7 +83,7 @@ export const handler = async (event) => {
 
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
+      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at, deleted_at, deleted_by')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 

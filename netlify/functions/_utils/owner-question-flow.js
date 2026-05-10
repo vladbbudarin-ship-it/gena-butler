@@ -77,6 +77,8 @@ async function generateAiDraft({ questionText, urgencyLevel }) {
 Верни строго JSON такого вида:
 {
   "ai_importance": "low | medium | high",
+  "ai_suggested_status": "answer | clarify | ignore | urgent_review",
+  "ai_reply_options": ["2-3 response options in Russian"],
   "ai_reason": "короткое объяснение на русском",
   "draft_ru": "черновик ответа на русском",
   "draft_zh": "перевод draft_ru на китайский"
@@ -94,6 +96,70 @@ async function generateAiDraft({ questionText, urgencyLevel }) {
   })
 
   return safeJsonParse(response.output_text)
+}
+
+function normalizeAiReplyOptions(value, draftRu) {
+  const options = Array.isArray(value)
+    ? value
+    : []
+
+  const normalized = options
+    .map((option) => String(option || '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+
+  if (normalized.length > 0) {
+    return normalized
+  }
+
+  return draftRu ? [draftRu] : []
+}
+
+function normalizeAiSuggestedStatus(value) {
+  return ['answer', 'clarify', 'ignore', 'urgent_review'].includes(value)
+    ? value
+    : 'answer'
+}
+
+async function updateQuestionAiDraft({ supabase, questionId, aiData }) {
+  const updateData = {
+    ai_importance: aiData.ai_importance,
+    ai_reason: aiData.ai_reason,
+    draft_ru: aiData.draft_ru,
+    draft_zh: aiData.draft_zh,
+    priority_score: aiData.priority_score,
+    final_importance: aiData.final_importance,
+    status: 'draft_ready',
+    ai_error_message: null,
+    ai_reply_options: aiData.ai_reply_options,
+    ai_suggested_status: aiData.ai_suggested_status,
+  }
+
+  const { error } = await supabase
+    .from('questions')
+    .update(updateData)
+    .eq('id', questionId)
+
+  if (!error) {
+    return
+  }
+
+  if (!isMissingSchemaColumn(error)) {
+    throw new Error(error.message)
+  }
+
+  const fallbackData = { ...updateData }
+  delete fallbackData.ai_reply_options
+  delete fallbackData.ai_suggested_status
+
+  const { error: fallbackError } = await supabase
+    .from('questions')
+    .update(fallbackData)
+    .eq('id', questionId)
+
+  if (fallbackError) {
+    throw new Error(fallbackError.message)
+  }
 }
 
 async function getOrCreateOwnerConversation({ supabase, userId }) {
@@ -335,24 +401,23 @@ export async function createOwnerQuestionFromUser({
     const contactBonus = isImportantContact ? 1 : 0
     const priorityScore = urgencyScore + aiScore + contactBonus
     const finalImportance = getFinalImportance(priorityScore)
+    const aiSuggestedStatus = normalizeAiSuggestedStatus(aiResult.ai_suggested_status)
+    const aiReplyOptions = normalizeAiReplyOptions(aiResult.ai_reply_options, aiResult.draft_ru)
 
-    const { error: updateError } = await supabase
-      .from('questions')
-      .update({
+    await updateQuestionAiDraft({
+      supabase,
+      questionId,
+      aiData: {
         ai_importance: aiResult.ai_importance,
         ai_reason: aiResult.ai_reason,
         draft_ru: aiResult.draft_ru,
         draft_zh: aiResult.draft_zh,
         priority_score: priorityScore,
         final_importance: finalImportance,
-        status: 'draft_ready',
-        ai_error_message: null,
-      })
-      .eq('id', questionId)
-
-    if (updateError) {
-      throw new Error(updateError.message)
-    }
+        ai_reply_options: aiReplyOptions,
+        ai_suggested_status: aiSuggestedStatus,
+      },
+    })
 
     return {
       success: true,
@@ -361,6 +426,9 @@ export async function createOwnerQuestionFromUser({
       question_id: questionId,
       status: 'draft_ready',
       final_importance: finalImportance,
+      ai_reason: aiResult.ai_reason,
+      ai_reply_options: aiReplyOptions,
+      ai_suggested_status: aiSuggestedStatus,
     }
   } catch (aiError) {
     await supabase

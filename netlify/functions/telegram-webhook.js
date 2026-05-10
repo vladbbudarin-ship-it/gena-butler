@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import {
   createOwnerQuestionFromUser,
-  saveOwnerDialogMessageFromUser,
 } from './_utils/owner-question-flow.js'
 import { OwnerActionError, performOwnerQuestionAction } from './_utils/owner-actions.js'
 import {
@@ -151,6 +150,50 @@ async function clearTelegramState(telegramUserId) {
     .eq('telegram_user_id', telegramUserId)
 }
 
+async function getOwnerTelegramProfiles() {
+  const { data: owners, error } = await supabase
+    .from('profiles')
+    .select('id, email, role, telegram_user_id')
+    .not('telegram_user_id', 'is', null)
+
+  if (error) {
+    console.error('Failed to load Telegram owners:', error.message)
+    return []
+  }
+
+  return (owners || []).filter((profile) => isOwnerProfile(profile))
+}
+
+function getProfileDisplayName(profile) {
+  return profile?.name || profile?.public_id || 'Пользователь'
+}
+
+async function notifyTelegramOwnersAboutQuestion({
+  senderProfile,
+  senderTelegramUserId,
+  text,
+  finalImportance,
+}) {
+  const owners = await getOwnerTelegramProfiles()
+
+  await Promise.all(
+    owners
+      .filter((owner) => owner.telegram_user_id && owner.telegram_user_id !== senderTelegramUserId)
+      .map((owner) => sendTelegramMessage(
+        owner.telegram_user_id,
+        [
+          `Новое сообщение от: ${getProfileDisplayName(senderProfile)}`,
+          '',
+          'Текст:',
+          truncateText(text, 1200),
+          '',
+          'Источник: Telegram',
+          `Итоговая важность: ${importanceLabels[finalImportance] || importanceLabels.low}`,
+        ].join('\n')
+      ))
+  )
+}
+
 async function sendUnlinkedWelcome(chatId) {
   await sendTelegramMessage(
     chatId,
@@ -240,15 +283,26 @@ async function handleStartLink({ chatId, from, code }) {
 }
 
 async function saveNormalDialogMessage({ chatId, profile, text }) {
-  const result = await saveOwnerDialogMessageFromUser({
+  const result = await createOwnerQuestionFromUser({
     supabase,
     userId: profile.id,
-    messageText: text,
+    questionText: text,
+    urgencyLevel: 'normal',
+    sourceChannel: 'telegram',
+    telegramChatId: chatId,
   })
 
   if (result.error) {
     await sendTelegramMessage(chatId, result.error)
+    return
   }
+
+  await notifyTelegramOwnersAboutQuestion({
+    senderProfile: profile,
+    senderTelegramUserId: profile.telegram_user_id,
+    text,
+    finalImportance: result.final_importance || 'low',
+  })
 }
 
 async function saveUrgentQuestion({ chatId, message, profile, text, urgencyLevel }) {
@@ -267,6 +321,13 @@ async function saveUrgentQuestion({ chatId, message, profile, text, urgencyLevel
     return
   }
 
+  await notifyTelegramOwnersAboutQuestion({
+    senderProfile: profile,
+    senderTelegramUserId: profile.telegram_user_id,
+    text,
+    finalImportance: result.final_importance || 'low',
+  })
+
   await sendTelegramMessage(chatId, 'Сообщение принято.', {
     reply_markup: mainMenuKeyboard({
       isOwner: isOwnerProfile(profile),
@@ -277,7 +338,7 @@ async function saveUrgentQuestion({ chatId, message, profile, text, urgencyLevel
 async function loadOwnerQuestions(filter) {
   const { data: questions, error } = await supabase
     .from('questions')
-    .select('id, user_id, question_text, urgency_level, final_importance, status, draft_ru, draft_zh, created_at')
+    .select('id, user_id, question_text, urgency_level, final_importance, status, ai_reason, ai_reply_options, ai_suggested_status, source_channel, draft_ru, draft_zh, created_at')
     .order('created_at', { ascending: false })
     .limit(50)
 
@@ -330,6 +391,12 @@ function buildQuestionCard(question) {
   const profile = question.user_profile
   const userName = profile?.name || profile?.public_id || profile?.email || 'Пользователь'
 
+  const replyOptions = Array.isArray(question.ai_reply_options)
+    ? question.ai_reply_options
+      .map((option, index) => `${index + 1}. ${truncateText(option, 350)}`)
+      .join('\n')
+    : ''
+
   return [
     `Пользователь: ${userName}`,
     `Статус: ${statusLabels[question.status] || question.status || 'Пока нет'}`,
@@ -337,6 +404,10 @@ function buildQuestionCard(question) {
     `Итоговая важность: ${importanceLabels[question.final_importance] || 'Пока нет'}`,
     '',
     `Вопрос: ${truncateText(question.question_text, 700)}`,
+    question.source_channel ? `Source: ${question.source_channel}` : null,
+    question.ai_suggested_status ? `AI suggested status: ${question.ai_suggested_status}` : null,
+    question.ai_reason ? ['', `AI reason: ${truncateText(question.ai_reason, 500)}`].join('\n') : null,
+    replyOptions ? ['', `AI reply options:\n${replyOptions}`].join('\n') : null,
     question.draft_ru ? ['', `AI RU: ${truncateText(question.draft_ru, 800)}`].join('\n') : null,
     question.draft_zh ? ['', `AI ZH: ${truncateText(question.draft_zh, 800)}`].join('\n') : null,
   ].filter(Boolean).join('\n')

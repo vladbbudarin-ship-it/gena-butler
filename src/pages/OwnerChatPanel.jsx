@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getOwnerChat, getOwnerChats, sendChatMessage } from '../lib/api'
+import { deleteMessage, getOwnerChat, getOwnerChats, sendChatMessage } from '../lib/api'
 
 const roleLabels = {
   user: 'Пользователь',
@@ -215,6 +215,16 @@ export default function OwnerChatPanel() {
     }
   }
 
+  async function handleDeleteMessage(messageId) {
+    try {
+      setMessage('')
+      await deleteMessage(messageId)
+      await refreshCurrentChat()
+    } catch (error) {
+      setMessage(error.message)
+    }
+  }
+
   function handleReplyTextChange(event) {
     setReplyText(event.target.value)
     resizeComposerTextarea(event.target)
@@ -293,7 +303,7 @@ export default function OwnerChatPanel() {
                     {profile.email && <span>{profile.email}</span>}
                     {conversation.last_message && (
                       <small>
-                        {conversation.last_message.body}
+                        {conversation.last_message.deleted_at ? 'Сообщение удалено' : conversation.last_message.body}
                       </small>
                     )}
                   </span>
@@ -343,20 +353,30 @@ export default function OwnerChatPanel() {
                         <span className="message-time">{formatTime(chatMessage.created_at)}</span>
                       </div>
 
-                      <div>
-                        {chatMessage.body}
+                      <div className={chatMessage.deleted_at ? 'deleted-message' : ''}>
+                        {chatMessage.deleted_at ? 'Сообщение удалено' : chatMessage.body}
                       </div>
 
-                      {chatMessage.sender_role === 'user' && (
+                      {!chatMessage.deleted_at && chatMessage.sender_role === 'user' && (
                         <span className={`message-badge ${getFinalImportanceBadgeClass(chatMessage.final_importance)}`}>
                           {getFinalImportanceLabel(chatMessage.final_importance)}
                         </span>
                       )}
 
-                      {chatMessage.body_zh && (
+                      {!chatMessage.deleted_at && chatMessage.body_zh && (
                         <div style={{ marginTop: '10px' }}>
                           {chatMessage.body_zh}
                         </div>
+                      )}
+
+                      {!chatMessage.deleted_at && chatMessage.sender_role === 'owner' && !chatMessage.source_question_id && (
+                        <button
+                          className="message-delete-button"
+                          type="button"
+                          onClick={() => handleDeleteMessage(chatMessage.id)}
+                        >
+                          Удалить
+                        </button>
                       )}
                     </article>
                   ))}

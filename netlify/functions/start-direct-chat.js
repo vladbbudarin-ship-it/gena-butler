@@ -119,7 +119,7 @@ export const handler = async (event) => {
     const { error: participantsError } = await supabase
       .from('conversation_participants')
       .upsert([
-        { conversation_id: conversation.id, user_id: user.id },
+        { conversation_id: conversation.id, user_id: user.id, deleted_at: null },
         { conversation_id: conversation.id, user_id: targetProfile.id },
       ], { onConflict: 'conversation_id,user_id' })
 

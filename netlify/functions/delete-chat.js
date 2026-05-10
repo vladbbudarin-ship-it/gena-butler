@@ -47,18 +47,23 @@ export const handler = async (event) => {
 
     const body = JSON.parse(event.body || '{}')
     const conversationId = body.conversation_id
-    const messageBody = String(body.body || '').trim()
 
     if (!conversationId) {
       return jsonResponse(400, { error: 'Не передан conversation_id.' })
     }
 
-    if (!messageBody) {
-      return jsonResponse(400, { error: 'Введите текст сообщения.' })
+    const { data: conversation, error: conversationError } = await supabase
+      .from('conversations')
+      .select('id, type')
+      .eq('id', conversationId)
+      .single()
+
+    if (conversationError || !conversation) {
+      return jsonResponse(404, { error: 'Чат не найден.' })
     }
 
-    if (messageBody.length > 3000) {
-      return jsonResponse(400, { error: 'Сообщение слишком длинное. Максимум 3000 символов.' })
+    if (conversation.type === 'owner') {
+      return jsonResponse(400, { error: 'Чат с Будариным удалить нельзя.' })
     }
 
     const { data: participant, error: participantError } = await supabase
@@ -79,45 +84,20 @@ export const handler = async (event) => {
       return jsonResponse(403, { error: 'Нет доступа к этому чату.' })
     }
 
-    const { data: conversation, error: conversationError } = await supabase
-      .from('conversations')
-      .select('id')
-      .eq('id', conversationId)
-      .eq('type', 'direct')
-      .single()
-
-    if (conversationError || !conversation) {
-      return jsonResponse(404, { error: 'Чат не найден.' })
-    }
-
-    const { data: message, error: messageError } = await supabase
-      .from('chat_messages')
-      .insert({
-        conversation_id: conversationId,
-        sender_id: user.id,
-        sender_role: 'user',
-        body: messageBody,
-        importance: 'normal',
-      })
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at, deleted_at, deleted_by')
-      .single()
-
-    if (messageError) {
-      return jsonResponse(500, {
-        error: 'Не удалось отправить сообщение.',
-        details: messageError.message,
-      })
-    }
-
-    await supabase
+    const { error: updateError } = await supabase
       .from('conversation_participants')
-      .update({ deleted_at: null })
+      .update({ deleted_at: new Date().toISOString() })
       .eq('conversation_id', conversationId)
+      .eq('user_id', user.id)
 
-    return jsonResponse(200, {
-      success: true,
-      message,
-    })
+    if (updateError) {
+      return jsonResponse(500, {
+        error: 'Не удалось удалить чат из списка.',
+        details: updateError.message,
+      })
+    }
+
+    return jsonResponse(200, { success: true })
   } catch (error) {
     return jsonResponse(500, {
       error: 'Внутренняя ошибка сервера.',

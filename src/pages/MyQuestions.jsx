@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  deleteChat,
+  deleteMessage,
   getDirectChat,
   getDirectChats,
   getMyChat,
@@ -262,6 +264,38 @@ export default function MyQuestions({ onBack }) {
     }
   }
 
+  async function handleDeleteSelectedChat() {
+    if (selectedChat.type !== 'direct') {
+      return
+    }
+
+    if (!window.confirm('Удалить чат из списка?')) {
+      return
+    }
+
+    try {
+      setStatusMessage('')
+      await deleteChat(selectedChat.id)
+      setSelectedChat({ type: 'owner', id: 'owner' })
+      setMessages([])
+      await loadChatList({ silent: true })
+      await loadSelectedChat({ type: 'owner', id: 'owner' }, { silent: true })
+    } catch (error) {
+      setStatusMessage(error.message)
+    }
+  }
+
+  async function handleDeleteMessage(messageId) {
+    try {
+      setStatusMessage('')
+      await deleteMessage(messageId)
+      await loadSelectedChat(selectedChatRef.current, { silent: true })
+      await loadChatList({ silent: true })
+    } catch (error) {
+      setStatusMessage(error.message)
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     setStatusMessage('')
@@ -382,7 +416,9 @@ export default function MyQuestions({ onBack }) {
                     <span className="chat-list-copy">
                       <strong>{chat.title}</strong>
                       <span>{chat.subtitle}</span>
-                      {chat.last_message && <small>{chat.last_message.body}</small>}
+                      {chat.last_message && (
+                        <small>{chat.last_message.deleted_at ? 'Сообщение удалено' : chat.last_message.body}</small>
+                      )}
                     </span>
                     {chat.unread_count > 0 && (
                       <span className="badge red">{chat.unread_count}</span>
@@ -404,6 +440,11 @@ export default function MyQuestions({ onBack }) {
               </div>
 
               <div className="toolbar">
+                {selectedChat.type === 'direct' && (
+                  <button className="danger ghost" type="button" onClick={handleDeleteSelectedChat}>
+                    Удалить чат
+                  </button>
+                )}
                 <button onClick={() => refreshAll(selectedChat)} disabled={loading}>
                   Обновить чат
                 </button>
@@ -433,20 +474,30 @@ export default function MyQuestions({ onBack }) {
                       <span className="message-time">{formatTime(message.created_at)}</span>
                     </div>
 
-                    <div>
-                      {message.body}
+                    <div className={message.deleted_at ? 'deleted-message' : ''}>
+                      {message.deleted_at ? 'Сообщение удалено' : message.body}
                     </div>
 
-                    {message.body_zh && (
+                    {!message.deleted_at && message.body_zh && (
                       <div style={{ marginTop: '10px' }}>
                         {message.body_zh}
                       </div>
                     )}
 
-                    {selectedChat.type === 'owner' && message.sender_role === 'user' && message.question_status && (
+                    {!message.deleted_at && selectedChat.type === 'owner' && message.sender_role === 'user' && message.question_status && (
                       <div className="question-status-badge">
                         {getQuestionStatusLabel(message.question_status)}
                       </div>
+                    )}
+
+                    {!message.deleted_at && message.sender_id === profile?.id && (
+                      <button
+                        className="message-delete-button"
+                        type="button"
+                        onClick={() => handleDeleteMessage(message.id)}
+                      >
+                        Удалить
+                      </button>
                     )}
                   </article>
                 ))}

@@ -137,7 +137,7 @@ export const handler = async (event) => {
           body: messageBody,
           importance: 'normal',
         })
-        .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
+        .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at, deleted_at, deleted_by')
         .single()
 
       if (messageError) {
@@ -193,7 +193,7 @@ export const handler = async (event) => {
         body: messageBody,
         importance: requestedImportance,
       })
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
+      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at, deleted_at, deleted_by')
       .single()
 
     if (messageError) {

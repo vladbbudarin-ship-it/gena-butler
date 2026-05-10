@@ -47,8 +47,9 @@ export const handler = async (event) => {
 
     const { data: participantRows, error: participantError } = await supabase
       .from('conversation_participants')
-      .select('conversation_id, last_read_at')
+      .select('conversation_id, last_read_at, deleted_at')
       .eq('user_id', user.id)
+      .is('deleted_at', null)
 
     if (participantError) {
       return jsonResponse(500, {
@@ -114,7 +115,7 @@ export const handler = async (event) => {
 
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, created_at')
+      .select('id, conversation_id, sender_id, sender_role, body, created_at, deleted_at, deleted_by')
       .in('conversation_id', directIds)
       .order('created_at', { ascending: false })
 
@@ -143,6 +144,7 @@ export const handler = async (event) => {
       unreadByConversationId[conversation.id] = messages.filter((message) => (
         message.conversation_id === conversation.id
         && message.sender_id !== user.id
+        && !message.deleted_at
         && (!lastRead || new Date(message.created_at) > lastRead)
       )).length
     }

@@ -122,7 +122,7 @@ export const handler = async (event) => {
 
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, source_question_id, created_at')
+      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, source_question_id, created_at, deleted_at, deleted_by')
       .eq('conversation_id', conversation.id)
       .order('created_at', { ascending: true })
 
