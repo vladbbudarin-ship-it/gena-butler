@@ -1865,3 +1865,63 @@ button.icon {
     width: auto;
   }
 }
+
+/* Compact brand marker: right design rail removed */
+.app-frame {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-frame > .brand-panel,
+.brand-panel.chat-brand {
+  display: none;
+}
+
+.owner-chat-shell {
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+}
+
+.brand-corner-badge {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: #111111;
+  padding: 8px 14px;
+  box-shadow: 0 12px 34px rgba(17, 17, 17, 0.16);
+  pointer-events: none;
+}
+
+.brand-corner-badge img,
+.brand-corner-badge .brand-logo-vertical {
+  display: block;
+  width: 64px;
+  max-width: 100%;
+  height: auto;
+  transform: none;
+}
+
+.brand-corner-badge .brand-logo-sign {
+  display: none;
+}
+
+@media (max-width: 920px) {
+  .brand-corner-badge {
+    top: 10px;
+    right: 10px;
+    width: 74px;
+    min-height: 30px;
+    padding: 7px 11px;
+  }
+
+  .brand-corner-badge img,
+  .brand-corner-badge .brand-logo-vertical {
+    width: 54px;
+  }
+}

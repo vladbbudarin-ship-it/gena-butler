@@ -6,12 +6,12 @@ import Profile from './pages/Profile'
 import MyQuestions from './pages/MyQuestions'
 import OwnerDashboard from './pages/OwnerDashboard'
 
-function BrandPanel() {
+function BrandBadge() {
   return (
-    <aside className="brand-panel">
+    <div className="brand-corner-badge" aria-label="Гена">
       <img className="brand-logo-vertical" src="/brand/gena-logo-white.png" alt="Гена" />
       <img className="brand-logo-sign" src="/brand/gena-logo-white.png" alt="" aria-hidden="true" />
-    </aside>
+    </div>
   )
 }
 
@@ -140,6 +140,8 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      <BrandBadge />
+
       <nav className="app-nav" aria-label="Основная навигация">
         <button
           className={screen === 'myQuestions' ? 'active' : 'secondary'}
@@ -202,7 +204,6 @@ export default function App() {
           )}
         </section>
 
-        <BrandPanel />
       </div>
 
       <MobileFloatingNav
