@@ -21,6 +21,16 @@ const roleLabels = {
   ai: 'AI',
 }
 
+const questionStatusLabels = {
+  ai_processing: 'AI обрабатывает',
+  draft_ready: 'Ожидает проверки Бударина',
+  approved: 'Ответ получен',
+  edited: 'Ответ получен',
+  manual_reply: 'Ответ получен',
+  rejected: 'Вопрос отклонён',
+  ai_error: 'Ошибка AI',
+}
+
 function formatTime(value) {
   if (!value) {
     return ''
@@ -83,6 +93,10 @@ function getDirectChatTitle(conversation) {
     || conversation?.other_user?.public_id
     || conversation?.title
     || 'Пользователь'
+}
+
+function getQuestionStatusLabel(status) {
+  return questionStatusLabels[status] || ''
 }
 
 export default function MyQuestions({ onBack }) {
@@ -426,6 +440,12 @@ export default function MyQuestions({ onBack }) {
                     {message.body_zh && (
                       <div style={{ marginTop: '10px' }}>
                         {message.body_zh}
+                      </div>
+                    )}
+
+                    {selectedChat.type === 'owner' && message.sender_role === 'user' && message.question_status && (
+                      <div className="question-status-badge">
+                        {getQuestionStatusLabel(message.question_status)}
                       </div>
                     )}
                   </article>

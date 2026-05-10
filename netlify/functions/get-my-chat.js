@@ -5,6 +5,14 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
+const safeQuestionFields = [
+  'id',
+  'status',
+  'final_answer_ru',
+  'final_answer_zh',
+  'closed_at',
+]
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -35,6 +43,49 @@ async function getUserFromEvent(event) {
   return { user }
 }
 
+async function attachQuestionStatuses(messages) {
+  const questionIds = [
+    ...new Set(
+      (messages || [])
+        .map((message) => message.source_question_id)
+        .filter(Boolean)
+    ),
+  ]
+
+  if (questionIds.length === 0) {
+    return messages || []
+  }
+
+  const { data: questions, error } = await supabase
+    .from('questions')
+    .select(safeQuestionFields.join(', '))
+    .in('id', questionIds)
+
+  if (error) {
+    throw error
+  }
+
+  const questionsById = Object.fromEntries(
+    (questions || []).map((question) => [question.id, question])
+  )
+
+  return (messages || []).map((message) => {
+    if (!message.source_question_id) {
+      return message
+    }
+
+    const question = questionsById[message.source_question_id]
+
+    return {
+      ...message,
+      question_status: question?.status || null,
+      final_answer_ru: question?.final_answer_ru || null,
+      final_answer_zh: question?.final_answer_zh || null,
+      question_closed_at: question?.closed_at || null,
+    }
+  })
+}
+
 export const handler = async (event) => {
   try {
     if (event.httpMethod !== 'GET') {
@@ -49,7 +100,7 @@ export const handler = async (event) => {
 
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('id, user_id, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at')
+      .select('id, user_id, type, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at')
       .eq('user_id', user.id)
       .eq('type', 'owner')
       .maybeSingle()
@@ -71,7 +122,7 @@ export const handler = async (event) => {
 
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
-      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, created_at')
+      .select('id, conversation_id, sender_id, sender_role, body, body_zh, importance, source_question_id, created_at')
       .eq('conversation_id', conversation.id)
       .order('created_at', { ascending: true })
 
@@ -82,6 +133,8 @@ export const handler = async (event) => {
       })
     }
 
+    const messagesWithQuestionStatuses = await attachQuestionStatuses(messages || [])
+
     await supabase
       .from('conversations')
       .update({ user_last_read_at: new Date().toISOString() })
@@ -90,7 +143,7 @@ export const handler = async (event) => {
     return jsonResponse(200, {
       success: true,
       conversation,
-      messages,
+      messages: messagesWithQuestionStatuses,
     })
   } catch (error) {
     return jsonResponse(500, {

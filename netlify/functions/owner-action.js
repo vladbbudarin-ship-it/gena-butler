@@ -81,10 +81,59 @@ async function getOrCreateConversation(userId) {
   return created
 }
 
-async function saveOwnerAnswerToChat({ ownerId, question, finalAnswerRu, finalAnswerZh }) {
-  const conversation = await getOrCreateConversation(question.user_id)
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /column|schema cache/i.test(error?.message || '')
+}
 
-  await supabase
+async function getQuestion(questionId) {
+  const { data, error } = await supabase
+    .from('questions')
+    .select('id, user_id, status, draft_ru, draft_zh, conversation_id, source_message_id, final_message_id')
+    .eq('id', questionId)
+    .single()
+
+  if (!error) {
+    return { question: data, error: null }
+  }
+
+  if (!isMissingSchemaColumn(error)) {
+    return { question: null, error }
+  }
+
+  const fallback = await supabase
+    .from('questions')
+    .select('id, user_id, status, draft_ru, draft_zh')
+    .eq('id', questionId)
+    .single()
+
+  return {
+    question: fallback.data,
+    error: fallback.error,
+  }
+}
+
+async function setQuestionFinalMessageId({ questionId, messageId }) {
+  if (!messageId) {
+    return
+  }
+
+  const { error } = await supabase
+    .from('questions')
+    .update({ final_message_id: messageId })
+    .eq('id', questionId)
+
+  if (error && !isMissingSchemaColumn(error)) {
+    throw error
+  }
+}
+
+async function saveOwnerAnswerToChat({ ownerId, question, finalAnswerRu, finalAnswerZh }) {
+  const conversation = question.conversation_id
+    ? { id: question.conversation_id }
+    : await getOrCreateConversation(question.user_id)
+
+  const { data: message, error } = await supabase
     .from('chat_messages')
     .insert({
       conversation_id: conversation.id,
@@ -95,6 +144,50 @@ async function saveOwnerAnswerToChat({ ownerId, question, finalAnswerRu, finalAn
       importance: 'normal',
       source_question_id: question.id,
     })
+    .select('id')
+    .single()
+
+  if (!error) {
+    await setQuestionFinalMessageId({
+      questionId: question.id,
+      messageId: message.id,
+    })
+    return message
+  }
+
+  if (error.code !== '23505') {
+    throw error
+  }
+
+  const { data: existingMessage, error: existingError } = await supabase
+    .from('chat_messages')
+    .select('id')
+    .eq('source_question_id', question.id)
+    .eq('sender_role', 'owner')
+    .maybeSingle()
+
+  if (existingError || !existingMessage) {
+    throw existingError || error
+  }
+
+  const { error: updateError } = await supabase
+    .from('chat_messages')
+    .update({
+      body: finalAnswerRu,
+      body_zh: finalAnswerZh || null,
+    })
+    .eq('id', existingMessage.id)
+
+  if (updateError) {
+    throw updateError
+  }
+
+  await setQuestionFinalMessageId({
+    questionId: question.id,
+    messageId: existingMessage.id,
+  })
+
+  return existingMessage
 }
 
 export const handler = async (event) => {
@@ -148,11 +241,7 @@ export const handler = async (event) => {
       })
     }
 
-    const { data: question, error: questionError } = await supabase
-      .from('questions')
-      .select('id, user_id, status, draft_ru, draft_zh')
-      .eq('id', questionId)
-      .single()
+    const { question, error: questionError } = await getQuestion(questionId)
 
     if (questionError || !question) {
       return jsonResponse(404, {
@@ -190,16 +279,12 @@ export const handler = async (event) => {
         })
       }
 
-      try {
-        await saveOwnerAnswerToChat({
-          ownerId: user.id,
-          question,
-          finalAnswerRu: question.draft_ru,
-          finalAnswerZh: question.draft_zh,
-        })
-      } catch (chatError) {
-        console.error('Failed to save owner answer to chat:', chatError.message)
-      }
+      await saveOwnerAnswerToChat({
+        ownerId: user.id,
+        question,
+        finalAnswerRu: question.draft_ru,
+        finalAnswerZh: question.draft_zh,
+      })
 
       return jsonResponse(200, {
         success: true,
@@ -235,16 +320,12 @@ export const handler = async (event) => {
         })
       }
 
-      try {
-        await saveOwnerAnswerToChat({
-          ownerId: user.id,
-          question,
-          finalAnswerRu,
-          finalAnswerZh,
-        })
-      } catch (chatError) {
-        console.error('Failed to save owner answer to chat:', chatError.message)
-      }
+      await saveOwnerAnswerToChat({
+        ownerId: user.id,
+        question,
+        finalAnswerRu,
+        finalAnswerZh,
+      })
 
       return jsonResponse(200, {
         success: true,
@@ -280,16 +361,12 @@ export const handler = async (event) => {
         })
       }
 
-      try {
-        await saveOwnerAnswerToChat({
-          ownerId: user.id,
-          question,
-          finalAnswerRu,
-          finalAnswerZh,
-        })
-      } catch (chatError) {
-        console.error('Failed to save owner answer to chat:', chatError.message)
-      }
+      await saveOwnerAnswerToChat({
+        ownerId: user.id,
+        question,
+        finalAnswerRu,
+        finalAnswerZh,
+      })
 
       return jsonResponse(200, {
         success: true,

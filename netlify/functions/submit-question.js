@@ -135,10 +135,15 @@ async function getOrCreateConversation(userId) {
   return created
 }
 
-async function saveQuestionToChat({ userId, questionId, questionText, urgencyLevel }) {
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /column|schema cache/i.test(error?.message || '')
+}
+
+async function saveQuestionMessageToChat({ userId, questionText, urgencyLevel }) {
   const conversation = await getOrCreateConversation(userId)
 
-  await supabase
+  const { data: message, error: messageError } = await supabase
     .from('chat_messages')
     .insert({
       conversation_id: conversation.id,
@@ -146,8 +151,59 @@ async function saveQuestionToChat({ userId, questionId, questionText, urgencyLev
       sender_role: 'user',
       body: questionText,
       importance: urgencyLevel,
-      source_question_id: questionId,
     })
+    .select('id, conversation_id')
+    .single()
+
+  if (messageError) {
+    throw messageError
+  }
+
+  return {
+    conversation,
+    message,
+  }
+}
+
+async function createQuestionRecord(questionData) {
+  const { data: question, error } = await supabase
+    .from('questions')
+    .insert(questionData)
+    .select('id, status')
+    .single()
+
+  if (!error) {
+    return { data: question, error: null }
+  }
+
+  if (!isMissingSchemaColumn(error)) {
+    return { data: null, error }
+  }
+
+  const fallbackQuestionData = { ...questionData }
+  delete fallbackQuestionData.conversation_id
+  delete fallbackQuestionData.source_message_id
+
+  return supabase
+    .from('questions')
+    .insert(fallbackQuestionData)
+    .select('id, status')
+    .single()
+}
+
+async function updateQuestionMessageLink({ questionId, messageId }) {
+  if (!messageId) {
+    return
+  }
+
+  const { error } = await supabase
+    .from('chat_messages')
+    .update({ source_question_id: questionId })
+    .eq('id', messageId)
+
+  if (error) {
+    throw error
+  }
 }
 
 export const handler = async (event) => {
@@ -209,18 +265,36 @@ export const handler = async (event) => {
 
     const isImportantContact = Boolean(profile?.is_important_contact)
 
-    const { data: question, error: insertError } = await supabase
-      .from('questions')
-      .insert({
-        user_id: user.id,
-        question_text: questionText,
-        urgency_level: urgencyLevel,
-        status: 'ai_processing',
+    let chatLink = null
+
+    try {
+      chatLink = await saveQuestionMessageToChat({
+        userId: user.id,
+        questionText,
+        urgencyLevel,
       })
-      .select('id, status')
-      .single()
+    } catch (chatError) {
+      return jsonResponse(500, {
+        error: 'Не удалось сохранить сообщение в чат.',
+        details: chatError.message,
+      })
+    }
+
+    const { data: question, error: insertError } = await createQuestionRecord({
+      user_id: user.id,
+      conversation_id: chatLink.conversation.id,
+      source_message_id: chatLink.message.id,
+      question_text: questionText,
+      urgency_level: urgencyLevel,
+      status: 'ai_processing',
+    })
 
     if (insertError) {
+      await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('id', chatLink.message.id)
+
       return jsonResponse(500, {
         error: 'Не удалось сохранить вопрос.',
         details: insertError.message,
@@ -230,14 +304,12 @@ export const handler = async (event) => {
     const createdQuestionId = question.id
 
     try {
-      await saveQuestionToChat({
-        userId: user.id,
+      await updateQuestionMessageLink({
         questionId: createdQuestionId,
-        questionText,
-        urgencyLevel,
+        messageId: chatLink.message.id,
       })
-    } catch (chatError) {
-      console.error('Failed to save question to chat:', chatError.message)
+    } catch (messageLinkError) {
+      console.error('Failed to link question message:', messageLinkError.message)
     }
 
     try {

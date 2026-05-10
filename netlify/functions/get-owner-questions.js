@@ -74,7 +74,7 @@ export const handler = async (event) => {
 
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, email, name, is_important_contact')
+      .select('id, email, name, public_id, is_important_contact')
       .in('id', userIds)
 
     if (profilesError) {

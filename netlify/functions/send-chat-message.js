@@ -120,6 +120,7 @@ export const handler = async (event) => {
         .from('conversations')
         .select('id')
         .eq('id', conversationId)
+        .eq('type', 'owner')
         .single()
 
       if (conversationError || !conversation) {
@@ -153,6 +154,12 @@ export const handler = async (event) => {
 
     if (!allowedImportance.includes(requestedImportance)) {
       return jsonResponse(400, { error: 'Некорректная важность сообщения.' })
+    }
+
+    if (requestedImportance) {
+      return jsonResponse(400, {
+      error: 'Вопросы Бударину нужно отправлять через чат с AI-обработкой.',
+      })
     }
 
     let conversation
