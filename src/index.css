@@ -496,7 +496,7 @@ button.icon {
 .importance-low {
   background: #ffffff;
   color: #111111;
-  border-color: #111111;
+  border: 1px solid #111111;
 }
 
 .importance-none {

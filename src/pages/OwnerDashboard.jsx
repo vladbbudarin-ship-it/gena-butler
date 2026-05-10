@@ -252,7 +252,7 @@ export default function OwnerDashboard({ onBack }) {
                     {getUrgencyLabel(question.urgency_level)}
                   </span>
                   <span className={getImportanceBadgeClass(question.final_importance)}>
-                    Итоговая важность: {getImportanceLabel(question.final_importance)}
+                    {getImportanceLabel(question.final_importance)}
                   </span>
                   <span className={getBadgeClass(question.status)}>
                     {getStatusLabel(question.status)}

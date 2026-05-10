@@ -273,7 +273,7 @@ export default function OwnerChatPanel() {
 
                       {chatMessage.sender_role === 'user' && (
                         <span className={`message-badge ${getFinalImportanceBadgeClass(chatMessage.final_importance)}`}>
-                          Итоговая важность: {getFinalImportanceLabel(chatMessage.final_importance)}
+                          {getFinalImportanceLabel(chatMessage.final_importance)}
                         </span>
                       )}
 
