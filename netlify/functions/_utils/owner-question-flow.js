@@ -125,6 +125,56 @@ async function getOrCreateOwnerConversation({ supabase, userId }) {
   return created
 }
 
+export async function saveOwnerDialogMessageFromUser({
+  supabase,
+  userId,
+  messageText,
+}) {
+  const normalizedMessageText = String(messageText || '').trim()
+
+  if (!normalizedMessageText) {
+    return {
+      error: 'Введите текст сообщения.',
+      statusCode: 400,
+    }
+  }
+
+  if (normalizedMessageText.length > 3000) {
+    return {
+      error: 'Сообщение слишком длинное. Максимум 3000 символов.',
+      statusCode: 400,
+    }
+  }
+
+  const conversation = await getOrCreateOwnerConversation({ supabase, userId })
+
+  const { data: message, error: messageError } = await supabase
+    .from('chat_messages')
+    .insert({
+      conversation_id: conversation.id,
+      sender_id: userId,
+      sender_role: 'user',
+      body: normalizedMessageText,
+      importance: 'normal',
+    })
+    .select('id, conversation_id')
+    .single()
+
+  if (messageError) {
+    return {
+      error: 'Не удалось сохранить сообщение в чат.',
+      details: messageError.message,
+      statusCode: 500,
+    }
+  }
+
+  return {
+    success: true,
+    conversation,
+    message,
+  }
+}
+
 async function createQuestionRecord({ supabase, questionData }) {
   const { data: question, error } = await supabase
     .from('questions')
@@ -143,6 +193,9 @@ async function createQuestionRecord({ supabase, questionData }) {
   const fallbackQuestionData = { ...questionData }
   delete fallbackQuestionData.conversation_id
   delete fallbackQuestionData.source_message_id
+  delete fallbackQuestionData.source_channel
+  delete fallbackQuestionData.telegram_chat_id
+  delete fallbackQuestionData.telegram_message_id
 
   return supabase
     .from('questions')
@@ -171,6 +224,9 @@ export async function createOwnerQuestionFromUser({
   userId,
   questionText,
   urgencyLevel = 'normal',
+  sourceChannel = 'web',
+  telegramChatId = null,
+  telegramMessageId = null,
 }) {
   const normalizedQuestionText = String(questionText || '').trim()
 
@@ -233,6 +289,9 @@ export async function createOwnerQuestionFromUser({
       question_text: normalizedQuestionText,
       urgency_level: urgencyLevel,
       status: 'ai_processing',
+      source_channel: sourceChannel,
+      telegram_chat_id: telegramChatId,
+      telegram_message_id: telegramMessageId,
     },
   })
 

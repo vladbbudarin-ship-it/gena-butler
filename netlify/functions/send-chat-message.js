@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { sendTelegramMessage } from './_utils/telegram.js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -118,7 +119,7 @@ export const handler = async (event) => {
 
       const { data: conversation, error: conversationError } = await supabase
         .from('conversations')
-        .select('id')
+        .select('id, user_id')
         .eq('id', conversationId)
         .eq('type', 'owner')
         .single()
@@ -144,6 +145,16 @@ export const handler = async (event) => {
           error: 'Не удалось отправить сообщение.',
           details: messageError.message,
         })
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('telegram_user_id')
+        .eq('id', conversation.user_id)
+        .maybeSingle()
+
+      if (profile?.telegram_user_id) {
+        await sendTelegramMessage(profile.telegram_user_id, `Бударин ответил:\n\n${messageBody}`)
       }
 
       return jsonResponse(200, {
