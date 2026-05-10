@@ -749,6 +749,11 @@ button.icon {
   margin-top: 12px;
 }
 
+.message-bubble.incoming .importance-badge.importance-low,
+.message-bubble.incoming .importance-badge.importance-none {
+  color: #111111;
+}
+
 .composer {
   display: grid;
   gap: 12px;
