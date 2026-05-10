@@ -166,6 +166,35 @@ export async function createInviteCode() {
   }
 }
 
+export async function createTelegramLinkCode() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const response = await fetch('/.netlify/functions/create-telegram-link-code', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось создать Telegram-код.'))
+  }
+
+  return {
+    code: result.code,
+    expiresAt: result.expires_at,
+    botUsername: result.bot_username,
+  }
+}
+
 export async function registerWithInvite({
   name,
   email,

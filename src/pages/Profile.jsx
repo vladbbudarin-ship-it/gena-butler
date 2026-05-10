@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { createInviteCode, getMyProfile } from '../lib/api'
+import { createInviteCode, createTelegramLinkCode, getMyProfile } from '../lib/api'
 
 function formatDateTime(value) {
   if (!value) {
@@ -29,6 +29,9 @@ export default function Profile({
   const [invite, setInvite] = useState(null)
   const [inviteMessage, setInviteMessage] = useState('')
   const [inviteLoading, setInviteLoading] = useState(false)
+  const [telegramLink, setTelegramLink] = useState(null)
+  const [telegramMessage, setTelegramMessage] = useState('')
+  const [telegramLoading, setTelegramLoading] = useState(false)
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -66,6 +69,30 @@ export default function Profile({
 
     await navigator.clipboard.writeText(invite.code)
     setInviteMessage('Код скопирован.')
+  }
+
+  async function handleCreateTelegramLinkCode() {
+    try {
+      setTelegramLoading(true)
+      setTelegramMessage('')
+
+      const linkData = await createTelegramLinkCode()
+      setTelegramLink(linkData)
+      setTelegramMessage('Telegram-код создан.')
+    } catch (error) {
+      setTelegramMessage(error.message)
+    } finally {
+      setTelegramLoading(false)
+    }
+  }
+
+  async function handleCopyTelegramCode() {
+    if (!telegramLink?.code) {
+      return
+    }
+
+    await navigator.clipboard.writeText(telegramLink.code)
+    setTelegramMessage('Telegram-код скопирован.')
   }
 
   useEffect(() => {
@@ -165,6 +192,49 @@ export default function Profile({
         )}
 
         {inviteMessage && <p className="notice" style={{ marginTop: '18px' }}>{inviteMessage}</p>}
+      </section>
+
+      <section className="dashboard-card">
+        <h3>Telegram</h3>
+
+        {profile?.telegram_user_id ? (
+          <div className="invite-code-box">
+            <span>Статус</span>
+            <strong>Telegram привязан</strong>
+            {profile?.telegram_username && <small>@{profile.telegram_username}</small>}
+          </div>
+        ) : (
+          <>
+            <p style={{ marginTop: '10px' }}>
+              Создайте код и отправьте его боту, чтобы писать Бударину прямо из Telegram.
+            </p>
+
+            <div className="button-row" style={{ marginTop: '20px' }}>
+              <button onClick={handleCreateTelegramLinkCode} disabled={telegramLoading}>
+                {telegramLoading ? 'Создаём...' : 'Привязать Telegram'}
+              </button>
+
+              {telegramLink?.code && (
+                <button className="secondary" onClick={handleCopyTelegramCode}>
+                  Скопировать код
+                </button>
+              )}
+            </div>
+
+            {telegramLink?.code && (
+              <div className="invite-code-box">
+                <span>Telegram-код</span>
+                <strong>{telegramLink.code}</strong>
+                <small>Действует до {formatDateTime(telegramLink.expiresAt)}</small>
+                <small>
+                  Откройте @{telegramLink.botUsername || 'BOT_USERNAME'} и отправьте /start {telegramLink.code}
+                </small>
+              </div>
+            )}
+          </>
+        )}
+
+        {telegramMessage && <p className="notice" style={{ marginTop: '18px' }}>{telegramMessage}</p>}
       </section>
     </div>
   )

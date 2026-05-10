@@ -1,14 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
+import { generateTelegramLinkCode } from './_utils/codes.js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const telegramBotUsername = process.env.TELEGRAM_BOT_USERNAME
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
-
-function isMissingSchemaColumn(error) {
-  return error?.code === 'PGRST204'
-    || /column|schema cache/i.test(error?.message || '')
-}
 
 function jsonResponse(statusCode, body) {
   return {
@@ -40,7 +37,7 @@ async function getUserFromEvent(event) {
 
 export const handler = async (event) => {
   try {
-    if (event.httpMethod !== 'GET') {
+    if (event.httpMethod !== 'POST') {
       return jsonResponse(405, { error: 'Method not allowed' })
     }
 
@@ -50,42 +47,42 @@ export const handler = async (event) => {
       return jsonResponse(401, { error: authError })
     }
 
-    let { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, email, name, role, public_id, telegram_user_id, telegram_username, telegram_linked_at')
-      .eq('id', user.id)
-      .maybeSingle()
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
-    if (profileError && isMissingSchemaColumn(profileError)) {
-      const fallback = await supabase
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const code = generateTelegramLinkCode()
+
+      const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, name, role, public_id')
+        .update({
+          telegram_link_code: code,
+          telegram_link_code_expires_at: expiresAt,
+        })
         .eq('id', user.id)
-        .maybeSingle()
+        .select('telegram_link_code, telegram_link_code_expires_at')
+        .single()
 
-      profile = fallback.data
-      profileError = fallback.error
-    }
+      if (!error) {
+        return jsonResponse(200, {
+          success: true,
+          code: data.telegram_link_code,
+          expires_at: data.telegram_link_code_expires_at,
+          bot_username: telegramBotUsername || null,
+        })
+      }
 
-    if (profileError) {
+      if (error.code === '23505') {
+        continue
+      }
+
       return jsonResponse(500, {
-        error: 'Не удалось загрузить профиль. Проверьте, что SQL-файл supabase/direct-chats-schema.sql выполнен в Supabase.',
-        details: profileError.message,
+        error: 'Не удалось создать Telegram-код. Проверьте, что SQL-файл supabase/telegram-schema.sql выполнен в Supabase.',
+        details: error.message,
       })
     }
 
-    return jsonResponse(200, {
-      success: true,
-      profile: profile || {
-        id: user.id,
-        email: user.email,
-        name: user.user_metadata?.name || null,
-        role: 'user',
-        public_id: null,
-        telegram_user_id: null,
-        telegram_username: null,
-        telegram_linked_at: null,
-      },
+    return jsonResponse(500, {
+      error: 'Не удалось создать уникальный Telegram-код. Попробуйте ещё раз.',
     })
   } catch (error) {
     return jsonResponse(500, {
