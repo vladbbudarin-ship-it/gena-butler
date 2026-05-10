@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   getDirectChat,
   getDirectChats,
@@ -53,6 +53,15 @@ function getMessageBubbleClass(message, selectedChat, profile) {
     : 'message-bubble incoming'
 }
 
+function resizeComposerTextarea(textarea) {
+  if (!textarea) {
+    return
+  }
+
+  textarea.style.height = 'auto'
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`
+}
+
 export default function MyQuestions({ onBack }) {
   const [profile, setProfile] = useState(null)
   const [ownerConversation, setOwnerConversation] = useState(null)
@@ -66,6 +75,7 @@ export default function MyQuestions({ onBack }) {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [startingChat, setStartingChat] = useState(false)
+  const messageTextareaRef = useRef(null)
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
@@ -173,6 +183,7 @@ export default function MyQuestions({ onBack }) {
         })
 
         setMessageText('')
+        resizeComposerTextarea(messageTextareaRef.current)
         setUrgency('normal')
         await refreshAll({ type: 'owner', id: 'owner' })
         return
@@ -185,11 +196,30 @@ export default function MyQuestions({ onBack }) {
 
       setMessages((currentMessages) => [...currentMessages, result.message])
       setMessageText('')
+      resizeComposerTextarea(messageTextareaRef.current)
       await refreshAll(selectedChat)
     } catch (error) {
       setStatusMessage(error.message)
     } finally {
       setSending(false)
+    }
+  }
+
+  function handleMessageTextChange(event) {
+    setMessageText(event.target.value)
+    resizeComposerTextarea(event.target)
+  }
+
+  function handleComposerKeyDown(event) {
+    if (
+      event.key === 'Enter'
+      && !event.shiftKey
+      && !event.ctrlKey
+      && !event.altKey
+      && !event.metaKey
+    ) {
+      event.preventDefault()
+      event.currentTarget.form?.requestSubmit()
     }
   }
 
@@ -287,13 +317,7 @@ export default function MyQuestions({ onBack }) {
                       <span className="message-time">{formatTime(message.created_at)}</span>
                     </div>
 
-                    {selectedChat.type === 'owner' && message.sender_role === 'user' && (
-                      <span className={`badge ${message.importance === 'urgent' ? 'red' : ''}`}>
-                        {urgencyLabels[message.importance] || message.importance}
-                      </span>
-                    )}
-
-                    <div style={{ marginTop: selectedChat.type === 'owner' && message.sender_role === 'user' ? '10px' : 0 }}>
+                    <div>
                       {message.body}
                     </div>
 
@@ -324,10 +348,14 @@ export default function MyQuestions({ onBack }) {
               )}
 
               <div className="composer-row">
-                <input
+                <textarea
+                  ref={messageTextareaRef}
+                  className="composer-textarea"
                   value={messageText}
-                  onChange={(event) => setMessageText(event.target.value)}
+                  onChange={handleMessageTextChange}
+                  onKeyDown={handleComposerKeyDown}
                   placeholder="текст"
+                  rows="1"
                 />
 
                 <button className="icon" type="submit" disabled={sending} aria-label="Отправить">

@@ -716,7 +716,18 @@ button.icon {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px;
-  align-items: end;
+  align-items: center;
+}
+
+.composer-textarea {
+  min-height: 54px;
+  height: 54px;
+  max-height: 180px;
+  border-radius: 28px;
+  line-height: 1.35;
+  resize: none;
+  overflow-y: auto;
+  padding: 15px 22px;
 }
 
 .importance-pills {
@@ -755,9 +766,13 @@ button.icon {
   margin-top: 16px;
 }
 
+.mobile-floating-nav {
+  display: none;
+}
+
 @media (max-width: 920px) {
   .app-shell {
-    padding: 16px;
+    padding: 16px 16px 112px;
   }
 
   .app-frame {
@@ -805,6 +820,63 @@ button.icon {
     max-height: 58svh;
   }
 
+  .mobile-floating-nav {
+    display: block;
+    position: fixed;
+    right: 18px;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    z-index: 1000;
+    pointer-events: none;
+  }
+
+  .mobile-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    transform: none;
+    z-index: 1000;
+    pointer-events: auto;
+  }
+
+  .mobile-nav-panel {
+    position: absolute;
+    right: 0;
+    bottom: 68px;
+    width: min(280px, calc(100vw - 36px));
+    display: grid;
+    gap: 10px;
+    border: 2px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: #fff;
+    padding: 14px;
+    box-shadow: var(--shadow);
+    z-index: 1001;
+    pointer-events: auto;
+  }
+
+  .mobile-nav-toggle {
+    position: relative;
+    z-index: 1002;
+    width: 58px;
+    height: 58px;
+    min-height: 58px;
+    border-radius: 50%;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    line-height: 1;
+    box-shadow: var(--shadow);
+    pointer-events: auto;
+  }
+
   .brand-panel.chat-brand {
     display: none;
   }
@@ -842,6 +914,10 @@ button.icon {
   button.icon {
     width: 54px;
     justify-self: end;
+  }
+
+  .mobile-nav-toggle {
+    width: 58px;
   }
 
   .meta-row {

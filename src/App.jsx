@@ -15,10 +15,63 @@ function BrandPanel() {
   )
 }
 
+function MobileFloatingNav({
+  isOpen,
+  isOwner,
+  onToggle,
+  onNavigate,
+}) {
+  return (
+    <div className={`mobile-floating-nav${isOpen ? ' open' : ''}`}>
+      {isOpen && (
+        <button
+          className="mobile-nav-backdrop"
+          type="button"
+          aria-label="Закрыть меню"
+          onClick={onToggle}
+        />
+      )}
+
+      {isOpen && (
+        <nav className="mobile-nav-panel" aria-label="Мобильная навигация">
+          <button type="button" onClick={() => onNavigate('myQuestions')}>
+            Чаты
+          </button>
+          <button className="secondary" type="button" onClick={() => onNavigate('profile')}>
+            Профиль
+          </button>
+          {isOwner && (
+            <button className="secondary" type="button" onClick={() => onNavigate('owner')}>
+              Кабинет Бударина
+            </button>
+          )}
+        </nav>
+      )}
+
+      <button
+        className="mobile-nav-toggle"
+        type="button"
+        aria-label={isOpen ? 'Закрыть меню' : 'Открыть меню'}
+        aria-expanded={isOpen}
+        onClick={onToggle}
+      >
+        ☰
+      </button>
+    </div>
+  )
+}
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [screen, setScreen] = useState('login')
   const [loading, setLoading] = useState(true)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const isOwner = Boolean(user?.email && user.email === import.meta.env.VITE_OWNER_EMAIL)
+
+  function openScreen(nextScreen) {
+    setScreen(nextScreen)
+    setMobileNavOpen(false)
+  }
 
   useEffect(() => {
     async function getSession() {
@@ -92,8 +145,8 @@ export default function App() {
           {screen === 'profile' && (
             <Profile
               user={user}
-              onOpenMyQuestions={() => setScreen('myQuestions')}
-              onOpenOwnerDashboard={() => setScreen('owner')}
+              onOpenMyQuestions={() => openScreen('myQuestions')}
+              onOpenOwnerDashboard={() => openScreen('owner')}
               onLogout={() => {
                 setUser(null)
                 setScreen('login')
@@ -103,19 +156,26 @@ export default function App() {
 
           {screen === 'myQuestions' && (
             <MyQuestions
-              onBack={() => setScreen('profile')}
+              onBack={() => openScreen('profile')}
             />
           )}
 
           {screen === 'owner' && (
             <OwnerDashboard
-              onBack={() => setScreen('profile')}
+              onBack={() => openScreen('profile')}
             />
           )}
         </section>
 
         <BrandPanel />
       </div>
+
+      <MobileFloatingNav
+        isOpen={mobileNavOpen}
+        isOwner={isOwner}
+        onToggle={() => setMobileNavOpen((current) => !current)}
+        onNavigate={openScreen}
+      />
     </main>
   )
 }

@@ -248,7 +248,7 @@ export default function OwnerDashboard({ onBack }) {
                     {getUrgencyLabel(question.urgency_level)}
                   </span>
                   <span className={getBadgeClass(question.final_importance)}>
-                    Итог: {getImportanceLabel(question.final_importance)}
+                    Итоговая важность: {getImportanceLabel(question.final_importance)}
                   </span>
                   <span className={getBadgeClass(question.status)}>
                     {getStatusLabel(question.status)}
@@ -265,9 +265,6 @@ export default function OwnerDashboard({ onBack }) {
                 </span>
                 <span className={question.user_profile?.is_important_contact ? 'badge dark' : 'badge'}>
                   Важный контакт: {question.user_profile?.is_important_contact ? 'Да' : 'Нет'}
-                </span>
-                <span className="badge">
-                  AI: {getImportanceLabel(question.ai_importance)}
                 </span>
               </div>
 

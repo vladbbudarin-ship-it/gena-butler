@@ -1,11 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getOwnerChat, getOwnerChats, sendChatMessage } from '../lib/api'
-
-const importanceLabels = {
-  normal: 'Обычное',
-  important: 'Важное',
-  urgent: 'Срочное',
-}
 
 const roleLabels = {
   user: 'Пользователь',
@@ -39,19 +33,20 @@ function getBubbleClass(role) {
   return 'message-bubble incoming'
 }
 
+function resizeComposerTextarea(textarea) {
+  if (!textarea) {
+    return
+  }
+
+  textarea.style.height = 'auto'
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`
+}
+
 function getConversationClass(conversation, isSelected) {
   const parts = ['chat-list-item']
 
   if (isSelected) {
     parts.push('active')
-  }
-
-  if (conversation.last_message?.importance === 'urgent') {
-    parts.push('urgent')
-  }
-
-  if (conversation.last_message?.importance === 'important') {
-    parts.push('important')
   }
 
   return parts.join(' ')
@@ -67,6 +62,7 @@ export default function OwnerChatPanel() {
   const [loadingList, setLoadingList] = useState(true)
   const [loadingChat, setLoadingChat] = useState(false)
   const [sending, setSending] = useState(false)
+  const replyTextareaRef = useRef(null)
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
@@ -143,11 +139,30 @@ export default function OwnerChatPanel() {
 
       setMessages((currentMessages) => [...currentMessages, result.message])
       setReplyText('')
+      resizeComposerTextarea(replyTextareaRef.current)
       await refreshCurrentChat()
     } catch (error) {
       setMessage(error.message)
     } finally {
       setSending(false)
+    }
+  }
+
+  function handleReplyTextChange(event) {
+    setReplyText(event.target.value)
+    resizeComposerTextarea(event.target)
+  }
+
+  function handleComposerKeyDown(event) {
+    if (
+      event.key === 'Enter'
+      && !event.shiftKey
+      && !event.ctrlKey
+      && !event.altKey
+      && !event.metaKey
+    ) {
+      event.preventDefault()
+      event.currentTarget.form?.requestSubmit()
     }
   }
 
@@ -191,8 +206,6 @@ export default function OwnerChatPanel() {
                     <span>{profile.email || 'email не найден'}</span>
                     {conversation.last_message && (
                       <small>
-                        {importanceLabels[conversation.last_message.importance] || conversation.last_message.importance}
-                        {' · '}
                         {conversation.last_message.body}
                       </small>
                     )}
@@ -240,13 +253,7 @@ export default function OwnerChatPanel() {
                         <span className="message-time">{formatTime(chatMessage.created_at)}</span>
                       </div>
 
-                      {chatMessage.sender_role === 'user' && (
-                        <span className={`badge ${chatMessage.importance === 'urgent' ? 'red' : ''}`}>
-                          {importanceLabels[chatMessage.importance] || chatMessage.importance}
-                        </span>
-                      )}
-
-                      <div style={{ marginTop: chatMessage.sender_role === 'user' ? '10px' : 0 }}>
+                      <div>
                         {chatMessage.body}
                       </div>
 
@@ -266,10 +273,14 @@ export default function OwnerChatPanel() {
             <>
               <form className="composer" onSubmit={handleSend}>
                 <div className="composer-row">
-                  <input
+                  <textarea
+                    ref={replyTextareaRef}
+                    className="composer-textarea"
                     value={replyText}
-                    onChange={(event) => setReplyText(event.target.value)}
+                    onChange={handleReplyTextChange}
+                    onKeyDown={handleComposerKeyDown}
                     placeholder="текст"
+                    rows="1"
                   />
 
                   <button className="icon" type="submit" disabled={sending} aria-label="Отправить">
