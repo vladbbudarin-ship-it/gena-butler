@@ -2088,17 +2088,11 @@ button.icon {
     max-width: 100%;
     font-size: 16px;
   }
-
-  .chat-page .composer-row {
-    grid-template-columns: minmax(0, 1fr) 46px;
-  }
-
   .chat-page button.icon {
     width: 46px;
     height: 46px;
     min-height: 46px;
   }
-<<<<<<< HEAD
 }
 
 @media (max-width: 920px) {
@@ -2115,6 +2109,4 @@ button.icon {
     bottom: auto;
     left: 0;
   }
-=======
->>>>>>> 59251c9 (Apply updated UI files)
 }

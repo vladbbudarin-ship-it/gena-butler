@@ -197,15 +197,11 @@ export default function App() {
               onBack={() => openScreen('profile')}
             />
           )}
-<<<<<<< HEAD
-
           {screen === 'owner' && (
             <OwnerDashboard
               onBack={() => openScreen('profile')}
             />
           )}
-=======
->>>>>>> 59251c9 (Apply updated UI files)
         </section>
 
       </div>
