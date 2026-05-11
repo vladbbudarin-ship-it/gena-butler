@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Profile from './pages/Profile'
 import MyQuestions from './pages/MyQuestions'
 import OwnerDashboard from './pages/OwnerDashboard'
+import Projects from './pages/Projects'
 
 function BrandBadge() {
   return (
@@ -39,6 +40,9 @@ function MobileFloatingNav({
           </button>
           <button className="secondary" type="button" onClick={() => onNavigate('profile')}>
             Профиль
+          </button>
+          <button className="secondary" type="button" onClick={() => onNavigate('projects')}>
+            Проекты
           </button>
           {isOwner && (
             <button className="secondary" type="button" onClick={() => onNavigate('owner')}>
@@ -157,6 +161,13 @@ export default function App() {
         >
           Профиль
         </button>
+        <button
+          className={screen === 'projects' ? 'active' : 'secondary'}
+          type="button"
+          onClick={() => openScreen('projects')}
+        >
+          Проекты
+        </button>
         {isOwner && (
           <>
             
@@ -171,12 +182,13 @@ export default function App() {
         )}
       </nav>
 
-      <div className={`app-frame ${screen === 'myQuestions' || screen === 'owner' ? 'workspace-frame' : ''}`}>
+      <div className={`app-frame ${screen === 'myQuestions' || screen === 'owner' || screen === 'projects' ? 'workspace-frame' : ''}`}>
         <section className="content-panel">
           {screen === 'profile' && (
             <Profile
               user={user}
               onOpenMyQuestions={() => openScreen('myQuestions')}
+              onOpenProjects={() => openScreen('projects')}
               onOpenOwnerDashboard={() => openScreen('owner')}
               onLogout={() => {
                 setUser(null)
