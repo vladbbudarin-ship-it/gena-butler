@@ -126,8 +126,6 @@ export default function Profile({
     <div className="page-stack">
       <section className="hero-card black">
         <img className="wordmark small light" src="/brand/gena-logo-white.png" alt="Гена" />
-        <h2>Профиль</h2>
-        <p>Личный concierge-кабинет для чатов, проектов и Telegram.</p>
       </section>
 
       <section className="dashboard-card">
