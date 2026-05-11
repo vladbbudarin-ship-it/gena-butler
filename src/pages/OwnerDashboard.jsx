@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPlusInviteCode, getOwnerQuestions, ownerAction } from '../lib/api'
+import { getOwnerQuestions, ownerAction } from '../lib/api'
 import OwnerChatPanel from './OwnerChatPanel'
 
 const closedStatuses = ['approved', 'edited', 'manual_reply', 'rejected']
@@ -76,20 +76,6 @@ function FieldBlock({ title, children }) {
   )
 }
 
-function formatDateTime(value) {
-  if (!value) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
-}
-
 export default function OwnerDashboard({ onBack }) {
   const [questions, setQuestions] = useState([])
   const [filter, setFilter] = useState('open')
@@ -102,9 +88,6 @@ export default function OwnerDashboard({ onBack }) {
 
   const [manualId, setManualId] = useState(null)
   const [manualRu, setManualRu] = useState('')
-  const [plusCode, setPlusCode] = useState(null)
-  const [plusCodeMessage, setPlusCodeMessage] = useState('')
-  const [plusCodeLoading, setPlusCodeLoading] = useState(false)
 
   async function loadQuestions() {
     try {
@@ -180,29 +163,6 @@ export default function OwnerDashboard({ onBack }) {
     setManualRu('')
   }
 
-  async function handleCreatePlusCode() {
-    try {
-      setPlusCodeLoading(true)
-      setPlusCodeMessage('')
-      const data = await createPlusInviteCode()
-      setPlusCode(data)
-      setPlusCodeMessage('Код Пользователь+ создан.')
-    } catch (error) {
-      setPlusCodeMessage(error.message)
-    } finally {
-      setPlusCodeLoading(false)
-    }
-  }
-
-  async function handleCopyPlusCode() {
-    if (!plusCode?.code) {
-      return
-    }
-
-    await navigator.clipboard.writeText(plusCode.code)
-    setPlusCodeMessage('Код скопирован.')
-  }
-
   useEffect(() => {
     loadQuestions()
   }, [])
@@ -249,35 +209,6 @@ export default function OwnerDashboard({ onBack }) {
 
 
       <OwnerChatPanel />
-
-      <section className="dashboard-card">
-        <h3>Коды Пользователь+</h3>
-        <p style={{ marginTop: '10px' }}>
-          Код одноразовый, действует 24 часа. Пользователь активирует его в Telegram командой /kodPlus Plus1234AB.
-        </p>
-
-        <div className="button-row" style={{ marginTop: '18px' }}>
-          <button onClick={handleCreatePlusCode} disabled={plusCodeLoading}>
-            {plusCodeLoading ? 'Создаём...' : 'Создать код Пользователь+'}
-          </button>
-
-          {plusCode?.code && (
-            <button className="secondary" onClick={handleCopyPlusCode}>
-              Скопировать код
-            </button>
-          )}
-        </div>
-
-        {plusCode?.code && (
-          <div className="invite-code-box">
-            <span>Код</span>
-            <strong>{plusCode.code}</strong>
-            <small>Действует до {formatDateTime(plusCode.expiresAt)}</small>
-          </div>
-        )}
-
-        {plusCodeMessage && <p className="notice" style={{ marginTop: '18px' }}>{plusCodeMessage}</p>}
-      </section>
 
       <section className="dashboard-card">
         <div className="filter-pills">

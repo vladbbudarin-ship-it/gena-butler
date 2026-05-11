@@ -16,23 +16,10 @@ function formatDateTime(value) {
   }).format(new Date(value))
 }
 
-function getAccountRoleLabel(profile, isOwner) {
-  if (isOwner || profile?.account_type === 'owner' || profile?.role === 'owner') {
-    return 'Бударин'
-  }
-
-  if (profile?.account_type === 'user_plus' || profile?.role === 'user_plus') {
-    return 'Пользователь+'
-  }
-
-  return 'Пользователь'
-}
-
 export default function Profile({
   user,
   onLogout,
   onOpenMyQuestions,
-  onOpenProjects,
   onOpenOwnerDashboard,
 }) {
   const ownerEmail = import.meta.env.VITE_OWNER_EMAIL
@@ -125,9 +112,9 @@ export default function Profile({
   return (
     <div className="page-stack">
       <section className="hero-card black">
+
         <img className="wordmark small light" src="/brand/gena-logo-white.png" alt="Гена" />
-        <h2>Профиль</h2>
-        <p>Личный concierge-кабинет для чатов, публичного ID и кабинета владельца.</p>
+
       </section>
 
       <section className="dashboard-card">
@@ -150,7 +137,7 @@ export default function Profile({
           <div className="meta-row">
             <span>Роль</span>
             <span className={`badge${isOwner ? ' dark' : ''}`}>
-              {getAccountRoleLabel(profile, isOwner)}
+              {isOwner ? 'Бударин' : 'Пользователь'}
             </span>
           </div>
         </div>
@@ -160,10 +147,6 @@ export default function Profile({
         <div className="button-row" style={{ marginTop: '24px' }}>
           <button onClick={onOpenMyQuestions}>
             Чаты
-          </button>
-
-          <button className="secondary" onClick={onOpenProjects}>
-            Проекты
           </button>
 
           <button className="secondary" onClick={handleCopyPublicId} disabled={!profile?.public_id}>
@@ -217,7 +200,7 @@ export default function Profile({
         {profile?.telegram_user_id ? (
           <div className="invite-code-box">
             <span>Статус</span>
-            <strong>Telegram привязан</strong>
+            <strong>Привязан</strong>
             {profile?.telegram_username && <small>@{profile.telegram_username}</small>}
           </div>
         ) : (

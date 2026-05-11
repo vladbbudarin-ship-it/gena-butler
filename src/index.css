@@ -2098,6 +2098,7 @@ button.icon {
     height: 46px;
     min-height: 46px;
   }
+<<<<<<< HEAD
 }
 
 @media (max-width: 920px) {
@@ -2114,4 +2115,6 @@ button.icon {
     bottom: auto;
     left: 0;
   }
+=======
+>>>>>>> 59251c9 (Apply updated UI files)
 }
