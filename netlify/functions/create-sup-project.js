@@ -124,7 +124,7 @@ export const handler = async (event) => {
       .insert({
         project_id: project.id,
         user_id: user.id,
-        position_title: 'Создатель',
+        position_title: 'Владелец проекта',
         access_level: 'admin',
       })
 

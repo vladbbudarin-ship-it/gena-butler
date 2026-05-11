@@ -15,7 +15,6 @@ import {
   updateSupProject,
   updateSupProjectMember,
   updateSupTask,
-  uploadSupProjectFile,
   uploadSupTaskFile,
 } from '../lib/api'
 
@@ -125,6 +124,7 @@ export default function Projects({ user, onBack }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [showCreateProject, setShowCreateProject] = useState(false)
+  const [showPlusGuide, setShowPlusGuide] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
   const [createProjectForm, setCreateProjectForm] = useState({
     title: '',
@@ -157,6 +157,7 @@ export default function Projects({ user, onBack }) {
   const [aiPrompt, setAiPrompt] = useState('')
 
   const canCreate = isPrivilegedProfile(profile, user)
+  const showPlusUpsell = profile?.account_type === 'user' && !canCreate
   const myAccess = getMyAccess(projectDetails, profile, user)
   const canManageProject = myAccess === 'admin'
   const canManageTasks = canCreate && ['admin', 'manager'].includes(myAccess)
@@ -408,25 +409,6 @@ export default function Projects({ user, onBack }) {
     }
   }
 
-  async function handleProjectFile(event) {
-    const file = event.target.files?.[0]
-    if (!file || !selectedProjectId) {
-      return
-    }
-
-    try {
-      setBusy(true)
-      setMessage('')
-      await uploadSupProjectFile(selectedProjectId, file)
-      await loadProjectDetails(selectedProjectId)
-    } catch (error) {
-      setMessage(error.message)
-    } finally {
-      event.target.value = ''
-      setBusy(false)
-    }
-  }
-
   async function handleTaskFile(event) {
     const file = event.target.files?.[0]
     if (!file || !selectedTaskId) {
@@ -479,11 +461,50 @@ export default function Projects({ user, onBack }) {
         <div className="sup-hero-actions">
           <button className="secondary" type="button" onClick={onBack}>Профиль</button>
           <button className="secondary" type="button" onClick={refresh}>Обновить</button>
-          <button type="button" onClick={() => setShowCreateProject(true)} disabled={!canCreate}>
-            + Новый проект
-          </button>
+          {canCreate && (
+            <button type="button" onClick={() => setShowCreateProject(true)}>
+              + Новый проект
+            </button>
+          )}
         </div>
       </section>
+
+      {showPlusUpsell && (
+        <section className={`sup-plus-card${showPlusGuide ? ' open' : ''}`}>
+          <div className="sup-plus-card-main">
+            <div>
+              <h3>Подключить Пользователь+</h3>
+              <p>Пользователь+ позволяет создавать проекты, задачи и управлять СУП.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPlusGuide((current) => !current)}
+              aria-expanded={showPlusGuide}
+            >
+              Как подключить?
+            </button>
+          </div>
+
+          {showPlusGuide && (
+            <div className="sup-plus-guide">
+              <h4>Как подключить Пользователь+</h4>
+              <ol>
+                <li>Получите одноразовый код у владельца сервиса.</li>
+                <li>Убедитесь, что ваш Telegram привязан к аккаунту.</li>
+                <li>Откройте Telegram-бота Дворецкого Гены.</li>
+                <li>
+                  Отправьте команду:
+                  <code>/kodPlus Plus1234AB</code>
+                  <span>где Plus1234AB — ваш одноразовый код.</span>
+                </li>
+                <li>После успешной активации обновите страницу.</li>
+                <li>Во вкладке «Проекты» появятся возможности Пользователь+.</li>
+              </ol>
+              <p>Код одноразовый и действует ограниченное время. Если код не работает, запросите новый у владельца.</p>
+            </div>
+          )}
+        </section>
+      )}
 
       {message && <p className="notice danger">{message}</p>}
 
@@ -570,29 +591,43 @@ export default function Projects({ user, onBack }) {
                   <div className="sup-grid">
                     <section className="dashboard-card">
                       <h4>Обзор проекта</h4>
-                      <form className="sup-form" onSubmit={handleUpdateProject}>
-                        <input
-                          value={projectForm.title}
-                          onChange={(event) => setProjectForm((current) => ({ ...current, title: event.target.value }))}
-                          disabled={!canManageProject}
-                        />
-                        <textarea
-                          value={projectForm.description}
-                          onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
-                          placeholder="Описание проекта"
-                          disabled={!canManageProject}
-                        />
-                        <select
-                          value={projectForm.status}
-                          onChange={(event) => setProjectForm((current) => ({ ...current, status: event.target.value }))}
-                          disabled={!canManageProject}
-                        >
-                          {Object.entries(projectStatusLabels).map(([value, label]) => (
-                            <option key={value} value={value}>{label}</option>
-                          ))}
-                        </select>
-                        <button type="submit" disabled={!canManageProject || busy}>Сохранить проект</button>
-                      </form>
+                      {canManageProject ? (
+                        <form className="sup-form" onSubmit={handleUpdateProject}>
+                          <input
+                            value={projectForm.title}
+                            onChange={(event) => setProjectForm((current) => ({ ...current, title: event.target.value }))}
+                          />
+                          <textarea
+                            value={projectForm.description}
+                            onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
+                            placeholder="Описание проекта"
+                          />
+                          <select
+                            value={projectForm.status}
+                            onChange={(event) => setProjectForm((current) => ({ ...current, status: event.target.value }))}
+                          >
+                            {Object.entries(projectStatusLabels).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                          <button type="submit" disabled={busy}>Сохранить проект</button>
+                        </form>
+                      ) : (
+                        <div className="sup-readonly">
+                          <div>
+                            <span>Название</span>
+                            <strong>{projectDetails.project.title}</strong>
+                          </div>
+                          <div>
+                            <span>Описание</span>
+                            <p>{projectDetails.project.description || 'Без описания'}</p>
+                          </div>
+                          <div>
+                            <span>Статус</span>
+                            <ProjectStatusPill status={projectDetails.project.status} />
+                          </div>
+                        </div>
+                      )}
                     </section>
 
                     <section className="dashboard-card sup-summary-card">
@@ -654,22 +689,51 @@ export default function Projects({ user, onBack }) {
                       {!taskDetails && <p className="notice">Задача не выбрана</p>}
                       {taskDetails && (
                         <>
-                          <form className="sup-form" onSubmit={handleUpdateTask}>
-                            <input value={taskForm.title} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} disabled={!canManageTasks} />
-                            <textarea value={taskForm.description} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} disabled={!canManageTasks} />
-                            <select value={taskForm.status} onChange={(event) => setTaskForm((current) => ({ ...current, status: event.target.value }))} disabled={!canManageTasks}>
-                              {Object.entries(taskStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                            </select>
-                            <select value={taskForm.priority} onChange={(event) => setTaskForm((current) => ({ ...current, priority: event.target.value }))} disabled={!canManageTasks}>
-                              {Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                            </select>
-                            <select value={taskForm.assigneeId} onChange={(event) => setTaskForm((current) => ({ ...current, assigneeId: event.target.value }))} disabled={!canManageTasks}>
-                              <option value="">Без ответственного</option>
-                              {memberOptions.map((member) => <option key={member.id} value={member.id}>{member.label}</option>)}
-                            </select>
-                            <input type="date" value={taskForm.dueDate} onChange={(event) => setTaskForm((current) => ({ ...current, dueDate: event.target.value }))} disabled={!canManageTasks} />
-                            <button type="submit" disabled={!canManageTasks || busy}>Сохранить задачу</button>
-                          </form>
+                          {canManageTasks ? (
+                            <form className="sup-form" onSubmit={handleUpdateTask}>
+                              <input value={taskForm.title} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} />
+                              <textarea value={taskForm.description} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} />
+                              <select value={taskForm.status} onChange={(event) => setTaskForm((current) => ({ ...current, status: event.target.value }))}>
+                                {Object.entries(taskStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                              </select>
+                              <select value={taskForm.priority} onChange={(event) => setTaskForm((current) => ({ ...current, priority: event.target.value }))}>
+                                {Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                              </select>
+                              <select value={taskForm.assigneeId} onChange={(event) => setTaskForm((current) => ({ ...current, assigneeId: event.target.value }))}>
+                                <option value="">Без ответственного</option>
+                                {memberOptions.map((member) => <option key={member.id} value={member.id}>{member.label}</option>)}
+                              </select>
+                              <input type="date" value={taskForm.dueDate} onChange={(event) => setTaskForm((current) => ({ ...current, dueDate: event.target.value }))} />
+                              <button type="submit" disabled={busy}>Сохранить задачу</button>
+                            </form>
+                          ) : (
+                            <div className="sup-readonly">
+                              <div>
+                                <span>Название</span>
+                                <strong>{taskDetails.task.title}</strong>
+                              </div>
+                              <div>
+                                <span>Описание</span>
+                                <p>{taskDetails.task.description || 'Без описания'}</p>
+                              </div>
+                              <div>
+                                <span>Статус</span>
+                                <strong>{taskStatusLabels[taskDetails.task.status] || taskDetails.task.status}</strong>
+                              </div>
+                              <div>
+                                <span>Приоритет</span>
+                                <strong>{priorityLabels[taskDetails.task.priority] || taskDetails.task.priority}</strong>
+                              </div>
+                              <div>
+                                <span>Ответственный</span>
+                                <strong>{getProfileName(taskDetails.task.assignee)}</strong>
+                              </div>
+                              <div>
+                                <span>Срок</span>
+                                <strong>{formatDate(taskDetails.task.due_date)}</strong>
+                              </div>
+                            </div>
+                          )}
 
                           <div className="button-row">
                             {canCompleteTask && <button type="button" onClick={() => handleTaskStatus('review')} disabled={busy}>Выполнено</button>}
@@ -760,14 +824,12 @@ export default function Projects({ user, onBack }) {
                   <section className="dashboard-card">
                     <h4>Файлы</h4>
                     <div className="sup-file-actions">
-                      <label className="file-control">
-                        Файл проекта
-                        <input type="file" onChange={handleProjectFile} disabled={!canCreate || busy} />
-                      </label>
-                      <label className="file-control">
-                        Файл задачи
-                        <input type="file" onChange={handleTaskFile} disabled={!canCreate || busy || !selectedTaskId} />
-                      </label>
+                      {canManageTasks && (
+                        <label className="file-control">
+                          Файл задачи
+                          <input type="file" onChange={handleTaskFile} disabled={busy || !selectedTaskId} />
+                        </label>
+                      )}
                     </div>
                     <div className="sup-mini-list">
                       {[...(projectDetails.files || []), ...(taskDetails?.files || [])].map((file) => (
@@ -786,23 +848,33 @@ export default function Projects({ user, onBack }) {
                   <div className="sup-grid">
                     <section className="dashboard-card">
                       <h4>AI-контекст</h4>
-                      <form className="sup-form" onSubmit={handleUpdateProject}>
-                        <textarea
-                          value={projectForm.aiContext}
-                          onChange={(event) => setProjectForm((current) => ({ ...current, aiContext: event.target.value }))}
-                          placeholder="Контекст проекта для AI"
-                          disabled={!canManageProject}
-                        />
-                        <button type="submit" disabled={!canManageProject || busy}>Сохранить контекст</button>
-                      </form>
+                      {canManageProject ? (
+                        <form className="sup-form" onSubmit={handleUpdateProject}>
+                          <textarea
+                            value={projectForm.aiContext}
+                            onChange={(event) => setProjectForm((current) => ({ ...current, aiContext: event.target.value }))}
+                            placeholder="Контекст проекта для AI"
+                          />
+                          <button type="submit" disabled={busy}>Сохранить контекст</button>
+                        </form>
+                      ) : (
+                        <div className="sup-readonly">
+                          <div>
+                            <span>AI-контекст проекта</span>
+                            <p>{projectDetails.project.ai_context || 'Контекст пока не заполнен.'}</p>
+                          </div>
+                        </div>
+                      )}
                     </section>
 
                     <section className="dashboard-card">
                       <h4>AI-помощник</h4>
-                      <form className="sup-form" onSubmit={handleAi}>
-                        <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Спросить AI по проекту или выбранной задаче" />
-                        <button type="submit" disabled={busy}>Получить AI-предложение</button>
-                      </form>
+                      {canCreate && (
+                        <form className="sup-form" onSubmit={handleAi}>
+                          <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Спросить AI по проекту или выбранной задаче" />
+                          <button type="submit" disabled={busy}>Получить AI-предложение</button>
+                        </form>
+                      )}
                       <div className="sup-mini-list">
                         {[...(taskDetails?.suggestions || []), ...(projectDetails.suggestions || [])].map((item) => (
                           <div className="sup-row" key={item.id}>

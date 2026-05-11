@@ -223,6 +223,31 @@ export async function createPlusInviteCode() {
   }
 }
 
+export async function getPlusInviteCodes() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const response = await fetch('/.netlify/functions/get-plus-invite-codes', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось загрузить коды Пользователь+.'))
+  }
+
+  return result.codes || []
+}
+
 export async function registerWithInvite({
   name,
   email,

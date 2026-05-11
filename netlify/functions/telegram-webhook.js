@@ -330,10 +330,23 @@ async function handleStartLink({ chatId, from, code }) {
 }
 
 async function handlePlusCode({ chatId, profile, code }) {
-  const normalizedCode = String(code || '').trim()
+  const rawCode = String(code || '').trim()
+  const normalizedCode = rawCode
+    ? `Plus${rawCode.slice(4).toUpperCase()}`
+    : ''
 
   if (!plusCodePattern.test(normalizedCode)) {
-    await sendTelegramMessage(chatId, 'Код Пользователь+ имеет неверный формат. Пример: /kodPlus Plus1234AB')
+    await sendTelegramMessage(chatId, 'Код Пользователь+ имеет неверный формат. Пример: /kodPlus Plus1234AB или kodPlus Plus1234AB')
+    return
+  }
+
+  if (profile.account_type === 'owner' || profile.role === 'owner') {
+    await sendTelegramMessage(chatId, 'У вас уже максимальный статус: Бударин.')
+    return
+  }
+
+  if (profile.account_type === 'user_plus' || profile.role === 'user_plus') {
+    await sendTelegramMessage(chatId, 'Статус Пользователь+ уже активирован.')
     return
   }
 
@@ -367,7 +380,6 @@ async function handlePlusCode({ chatId, profile, code }) {
     .from('profiles')
     .update({
       account_type: 'user_plus',
-      role: 'user_plus',
     })
     .eq('id', profile.id)
 
@@ -392,7 +404,7 @@ async function handlePlusCode({ chatId, profile, code }) {
   }
 
   await sendTelegramMessage(chatId, 'Готово. Статус Пользователь+ активирован.', {
-    reply_markup: mainMenuKeyboard({ isOwner: isOwnerProfile({ ...profile, account_type: 'user_plus', role: 'user_plus' }) }),
+    reply_markup: mainMenuKeyboard({ isOwner: isOwnerProfile({ ...profile, account_type: 'user_plus' }) }),
   })
 }
 
@@ -637,7 +649,7 @@ async function handleMessage(update) {
   const from = message.from
   const text = message.text.trim()
   const startMatch = text.match(/^\/start(?:@\w+)?\s+(TG-[0-9]{4}[A-Z]{2})$/i)
-  const plusMatch = text.match(/^\/kodPlus(?:@\w+)?\s+(Plus[0-9]{4}[A-Z]{2})$/i)
+  const plusMatch = text.match(/^\/?kodPlus(?:@\w+)?\s+(Plus[0-9]{4}[A-Z]{2})$/i)
   const pureCodeMatch = text.match(/^(TG-[0-9]{4}[A-Z]{2})$/i)
   const profile = await getLinkedProfile(from.id)
 

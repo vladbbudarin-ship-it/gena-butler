@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getOwnerQuestions, ownerAction } from '../lib/api'
+import {
+  createPlusInviteCode,
+  getOwnerQuestions,
+  getPlusInviteCodes,
+  ownerAction,
+} from '../lib/api'
 import OwnerChatPanel from './OwnerChatPanel'
 
 const closedStatuses = ['approved', 'edited', 'manual_reply', 'rejected']
@@ -25,6 +30,12 @@ const importanceLabels = {
   low: 'Низкая',
   medium: 'Средняя',
   high: 'Высокая',
+}
+
+const plusCodeStatusLabels = {
+  active: 'Активен',
+  used: 'Использован',
+  expired: 'Истёк',
 }
 
 function getStatusLabel(status) {
@@ -63,6 +74,36 @@ function getBadgeClass(value) {
   return 'badge'
 }
 
+function formatDateTime(value) {
+  if (!value) {
+    return '—'
+  }
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function getProfileName(profile) {
+  return profile?.name || profile?.public_id || profile?.email || 'Пользователь'
+}
+
+function getPlusCodeBadgeClass(status) {
+  if (status === 'active') {
+    return 'status-pill status-approved'
+  }
+
+  if (status === 'used') {
+    return 'badge dark'
+  }
+
+  return 'status-pill status-rejected'
+}
+
 function FieldBlock({ title, children }) {
   if (!children) {
     return null
@@ -82,6 +123,9 @@ export default function OwnerDashboard({ onBack }) {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState(null)
+  const [plusCodes, setPlusCodes] = useState([])
+  const [plusCodeMessage, setPlusCodeMessage] = useState('')
+  const [plusCodeLoading, setPlusCodeLoading] = useState(false)
 
   const [editingId, setEditingId] = useState(null)
   const [editRu, setEditRu] = useState('')
@@ -101,6 +145,40 @@ export default function OwnerDashboard({ onBack }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function loadPlusCodes({ silent = false } = {}) {
+    try {
+      if (!silent) {
+        setPlusCodeMessage('')
+      }
+
+      const data = await getPlusInviteCodes()
+      setPlusCodes(data)
+    } catch (error) {
+      if (!silent) {
+        setPlusCodeMessage(error.message)
+      }
+    }
+  }
+
+  async function handleCreatePlusCode() {
+    try {
+      setPlusCodeLoading(true)
+      setPlusCodeMessage('')
+      const data = await createPlusInviteCode()
+      setPlusCodeMessage(`Код создан: ${data.code}`)
+      await loadPlusCodes({ silent: true })
+    } catch (error) {
+      setPlusCodeMessage(error.message)
+    } finally {
+      setPlusCodeLoading(false)
+    }
+  }
+
+  async function handleCopyPlusCode(code) {
+    await navigator.clipboard.writeText(code)
+    setPlusCodeMessage('Код скопирован.')
   }
 
   async function handleOwnerAction({
@@ -165,6 +243,7 @@ export default function OwnerDashboard({ onBack }) {
 
   useEffect(() => {
     loadQuestions()
+    loadPlusCodes({ silent: true })
   }, [])
 
   const filteredQuestions = useMemo(() => {
@@ -209,6 +288,50 @@ export default function OwnerDashboard({ onBack }) {
 
 
       <OwnerChatPanel />
+
+      <section className="dashboard-card">
+        <div className="sup-header" style={{ marginBottom: '16px' }}>
+          <div>
+            <h3>Пользователи+</h3>
+            <p>Одноразовые коды для выдачи доступа user_plus через Telegram-команду kodPlus.</p>
+          </div>
+          <div className="toolbar">
+            <button type="button" onClick={handleCreatePlusCode} disabled={plusCodeLoading}>
+              {plusCodeLoading ? 'Создаём...' : 'Создать код Пользователь+'}
+            </button>
+            <button className="secondary" type="button" onClick={() => loadPlusCodes()}>
+              Обновить коды
+            </button>
+          </div>
+        </div>
+
+        {plusCodeMessage && <p className="notice" style={{ marginBottom: '14px' }}>{plusCodeMessage}</p>}
+
+        <div className="sup-mini-list">
+          {plusCodes.length === 0 && (
+            <p className="notice">Кодов Пользователь+ пока нет.</p>
+          )}
+
+          {plusCodes.map((code) => (
+            <div className="sup-row" key={code.id}>
+              <div>
+                <strong>{code.code}</strong>
+                <small>Создан: {formatDateTime(code.created_at)} · Действует до: {formatDateTime(code.expires_at)}</small>
+                <small>Создал: {getProfileName(code.created_by_profile)}</small>
+                <small>Использовал: {code.used_by_profile ? getProfileName(code.used_by_profile) : '—'}</small>
+              </div>
+              <div className="sup-row-actions">
+                <span className={getPlusCodeBadgeClass(code.status)}>
+                  {plusCodeStatusLabels[code.status] || code.status}
+                </span>
+                <button className="secondary" type="button" onClick={() => handleCopyPlusCode(code.code)}>
+                  Скопировать
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="dashboard-card">
         <div className="filter-pills">
