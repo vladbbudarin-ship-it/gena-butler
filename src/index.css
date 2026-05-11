@@ -2099,3 +2099,19 @@ button.icon {
     min-height: 46px;
   }
 }
+
+@media (max-width: 920px) {
+  .mobile-floating-nav {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: auto;
+    bottom: auto;
+    left: 12px;
+  }
+
+  .mobile-nav-panel {
+    top: 68px;
+    right: auto;
+    bottom: auto;
+    left: 0;
+  }
+}

@@ -39,7 +39,7 @@ async function getUserFromEvent(event) {
 async function getProfile(userId) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, role, name, public_id, email')
+    .select('id, role, account_type, name, public_id, email')
     .eq('id', userId)
     .maybeSingle()
 
@@ -51,7 +51,8 @@ async function getProfile(userId) {
 }
 
 function isOwner(profile) {
-  return ['owner', 'admin'].includes(profile?.role)
+  return profile?.account_type === 'owner'
+    || ['owner', 'admin'].includes(profile?.role)
 }
 
 async function getProjectMember(projectId, userId) {

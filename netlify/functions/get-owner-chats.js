@@ -93,11 +93,11 @@ async function getUserFromEvent(event) {
 async function isOwner(user) {
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, account_type')
     .eq('id', user.id)
     .maybeSingle()
 
-  return ['owner', 'admin'].includes(profile?.role) || normalizeEmail(user.email) === normalizeEmail(ownerEmail)
+  return profile?.account_type === 'owner' || ['owner', 'admin'].includes(profile?.role) || normalizeEmail(user.email) === normalizeEmail(ownerEmail)
 }
 
 export const handler = async (event) => {

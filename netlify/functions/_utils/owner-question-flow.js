@@ -318,11 +318,21 @@ export async function createOwnerQuestionFromUser({
     }
   }
 
-  const { data: profile } = await supabase
+  let { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, name, role, public_id, telegram_user_id, telegram_username, is_important_contact')
+    .select('id, email, name, role, account_type, public_id, telegram_user_id, telegram_username, is_important_contact')
     .eq('id', userId)
     .maybeSingle()
+
+  if (profileError && isMissingSchemaColumn(profileError)) {
+    const fallback = await supabase
+      .from('profiles')
+      .select('id, email, name, role, public_id, telegram_user_id, telegram_username, is_important_contact')
+      .eq('id', userId)
+      .maybeSingle()
+
+    profile = fallback.data
+  }
 
   const isImportantContact = Boolean(profile?.is_important_contact)
   const conversation = await getOrCreateOwnerConversation({ supabase, userId })

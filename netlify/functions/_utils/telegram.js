@@ -1,6 +1,6 @@
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN
 const telegramBotUsername = process.env.TELEGRAM_BOT_USERNAME
-const siteUrl = 'https://gena-dvoretskiy.netlify.app'
+const siteUrl = process.env.URL || process.env.DEPLOY_PRIME_URL || 'https://gena-dvoretskiy.netlify.app'
 
 export const TELEGRAM_SITE_URL = siteUrl
 
@@ -20,7 +20,8 @@ export function truncateText(text, maxLength = 700) {
 
 async function telegramApi(method, payload) {
   if (!telegramBotToken) {
-    return null
+    console.warn(`Telegram API ${method} skipped: TELEGRAM_BOT_TOKEN is not set.`)
+    return { ok: false, missingToken: true }
   }
 
   const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/${method}`, {
@@ -32,6 +33,7 @@ async function telegramApi(method, payload) {
   if (!response.ok) {
     const body = await response.text()
     console.error(`Telegram API ${method} failed:`, body)
+    return { ok: false, status: response.status, body }
   }
 
   return response

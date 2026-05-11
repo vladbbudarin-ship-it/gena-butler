@@ -2,8 +2,13 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const ownerEmail = process.env.OWNER_EMAIL
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase()
+}
 
 function isMissingSchemaColumn(error) {
   return error?.code === 'PGRST204'
@@ -52,7 +57,7 @@ export const handler = async (event) => {
 
     let { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, email, name, role, public_id, telegram_user_id, telegram_username, telegram_linked_at')
+      .select('id, email, name, role, account_type, public_id, telegram_user_id, telegram_username, telegram_linked_at')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -74,6 +79,22 @@ export const handler = async (event) => {
       })
     }
 
+    if (profile && normalizeEmail(user.email) === normalizeEmail(ownerEmail) && profile.account_type !== 'owner') {
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          account_type: 'owner',
+          role: 'owner',
+        })
+        .eq('id', user.id)
+        .select('id, email, name, role, account_type, public_id, telegram_user_id, telegram_username, telegram_linked_at')
+        .maybeSingle()
+
+      if (!updateError && updatedProfile) {
+        profile = updatedProfile
+      }
+    }
+
     return jsonResponse(200, {
       success: true,
       profile: profile || {
@@ -81,6 +102,7 @@ export const handler = async (event) => {
         email: user.email,
         name: user.user_metadata?.name || null,
         role: 'user',
+        account_type: 'user',
         public_id: null,
         telegram_user_id: null,
         telegram_username: null,

@@ -195,6 +195,34 @@ export async function createTelegramLinkCode() {
   }
 }
 
+export async function createPlusInviteCode() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  const response = await fetch('/.netlify/functions/create-plus-invite-code', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось создать код Пользователь+.'))
+  }
+
+  return {
+    code: result.code,
+    expiresAt: result.expires_at,
+  }
+}
+
 export async function registerWithInvite({
   name,
   email,
@@ -598,36 +626,27 @@ export async function getSupProjects() {
 export async function createSupProject({ title, description, status, aiContext }) {
   const session = await getRequiredSession()
 
-  const { data: project, error: projectError } = await supabase
-    .from('sup_projects')
-    .insert({
+  const response = await fetch('/.netlify/functions/create-sup-project', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
       title,
       description,
       status,
       ai_context: aiContext,
-      created_by: session.user.id,
-    })
-    .select('*')
-    .single()
+    }),
+  })
 
-  if (projectError) {
-    throw new Error(`Не удалось создать проект. ${projectError.message}`)
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось создать проект.'))
   }
 
-  const { error: memberError } = await supabase
-    .from('sup_project_members')
-    .insert({
-      project_id: project.id,
-      user_id: session.user.id,
-      position_title: 'Создатель',
-      access_level: 'admin',
-    })
-
-  if (memberError) {
-    throw new Error(`Проект создан, но не удалось добавить администратора. ${memberError.message}`)
-  }
-
-  return project
+  return result.project
 }
 
 export async function updateSupProject(projectId, { title, description, status, aiContext }) {

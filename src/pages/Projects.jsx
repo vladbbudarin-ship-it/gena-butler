@@ -86,11 +86,12 @@ function getProfileName(profile) {
 
 function isPrivilegedProfile(profile, user) {
   return ['user_plus', 'owner', 'admin'].includes(profile?.role)
+    || ['user_plus', 'owner'].includes(profile?.account_type)
     || user?.email === import.meta.env.VITE_OWNER_EMAIL
 }
 
 function getMyAccess(projectDetails, profile, user) {
-  if (user?.email === import.meta.env.VITE_OWNER_EMAIL || ['owner', 'admin'].includes(profile?.role)) {
+  if (user?.email === import.meta.env.VITE_OWNER_EMAIL || ['owner', 'admin'].includes(profile?.role) || profile?.account_type === 'owner') {
     return 'admin'
   }
 

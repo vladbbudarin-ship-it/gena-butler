@@ -22,6 +22,7 @@ const ownerEmail = process.env.OWNER_EMAIL
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
 const telegramLinkCodePattern = /^TG-[0-9]{4}[A-Z]{2}$/
+const plusCodePattern = /^Plus[0-9]{4}[A-Z]{2}$/
 const closedStatuses = ['approved', 'edited', 'manual_reply', 'rejected']
 
 const urgencyLabels = {
@@ -52,6 +53,16 @@ const statusLabels = {
   ai_error: 'Ошибка AI',
 }
 
+function isMissingTelegramStateTable(error) {
+  return error?.code === '42P01'
+    || /telegram_bot_states|does not exist|schema cache/i.test(error?.message || '')
+}
+
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /account_type|column|schema cache/i.test(error?.message || '')
+}
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -69,16 +80,28 @@ function getTelegramUsername(from) {
 }
 
 function isOwnerProfile(profile) {
-  return ['owner', 'admin'].includes(profile?.role)
+  return profile?.account_type === 'owner'
+    || ['owner', 'admin'].includes(profile?.role)
     || normalizeEmail(profile?.email) === normalizeEmail(ownerEmail)
 }
 
 async function getLinkedProfile(telegramUserId) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('profiles')
-    .select('id, email, name, role, public_id, telegram_user_id, telegram_username')
+    .select('id, email, name, role, account_type, public_id, telegram_user_id, telegram_username')
     .eq('telegram_user_id', telegramUserId)
     .maybeSingle()
+
+  if (error && isMissingSchemaColumn(error)) {
+    const fallback = await supabase
+      .from('profiles')
+      .select('id, email, name, role, public_id, telegram_user_id, telegram_username')
+      .eq('telegram_user_id', telegramUserId)
+      .maybeSingle()
+
+    data = fallback.data
+    error = fallback.error
+  }
 
   if (error) {
     throw error
@@ -109,6 +132,11 @@ async function setTelegramState({
     }, { onConflict: 'telegram_user_id' })
 
   if (error) {
+    if (isMissingTelegramStateTable(error)) {
+      console.warn('telegram_bot_states table is missing. Telegram state was not saved.')
+      return
+    }
+
     throw error
   }
 }
@@ -121,6 +149,11 @@ async function getTelegramState(telegramUserId) {
     .maybeSingle()
 
   if (error) {
+    if (isMissingTelegramStateTable(error)) {
+      console.warn('telegram_bot_states table is missing. Falling back to idle state.')
+      return { state: 'idle', payload: {} }
+    }
+
     throw error
   }
 
@@ -144,17 +177,31 @@ async function getTelegramState(telegramUserId) {
 }
 
 async function clearTelegramState(telegramUserId) {
-  await supabase
+  const { error } = await supabase
     .from('telegram_bot_states')
     .delete()
     .eq('telegram_user_id', telegramUserId)
+
+  if (error && !isMissingTelegramStateTable(error)) {
+    throw error
+  }
 }
 
 async function getOwnerTelegramProfiles() {
-  const { data: owners, error } = await supabase
+  let { data: owners, error } = await supabase
     .from('profiles')
-    .select('id, email, role, telegram_user_id')
+    .select('id, email, role, account_type, telegram_user_id')
     .not('telegram_user_id', 'is', null)
+
+  if (error && isMissingSchemaColumn(error)) {
+    const fallback = await supabase
+      .from('profiles')
+      .select('id, email, role, telegram_user_id')
+      .not('telegram_user_id', 'is', null)
+
+    owners = fallback.data
+    error = fallback.error
+  }
 
   if (error) {
     console.error('Failed to load Telegram owners:', error.message)
@@ -279,6 +326,73 @@ async function handleStartLink({ chatId, from, code }) {
     ...profile,
     telegram_user_id: from.id,
     telegram_username: getTelegramUsername(from),
+  })
+}
+
+async function handlePlusCode({ chatId, profile, code }) {
+  const normalizedCode = String(code || '').trim()
+
+  if (!plusCodePattern.test(normalizedCode)) {
+    await sendTelegramMessage(chatId, 'Код Пользователь+ имеет неверный формат. Пример: /kodPlus Plus1234AB')
+    return
+  }
+
+  const { data: inviteCode, error: codeError } = await supabase
+    .from('plus_invite_codes')
+    .select('id, code, is_used, expires_at')
+    .eq('code', normalizedCode)
+    .maybeSingle()
+
+  if (codeError) {
+    await sendTelegramMessage(chatId, 'Не удалось проверить код. Попробуйте позже.')
+    return
+  }
+
+  if (!inviteCode) {
+    await sendTelegramMessage(chatId, 'Код Пользователь+ не найден.')
+    return
+  }
+
+  if (inviteCode.is_used) {
+    await sendTelegramMessage(chatId, 'Этот код Пользователь+ уже использован.')
+    return
+  }
+
+  if (!inviteCode.expires_at || new Date(inviteCode.expires_at).getTime() <= Date.now()) {
+    await sendTelegramMessage(chatId, 'Срок действия кода Пользователь+ истёк.')
+    return
+  }
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      account_type: 'user_plus',
+      role: 'user_plus',
+    })
+    .eq('id', profile.id)
+
+  if (profileError) {
+    await sendTelegramMessage(chatId, 'Не удалось обновить статус профиля. Попробуйте позже.')
+    return
+  }
+
+  const { error: updateCodeError } = await supabase
+    .from('plus_invite_codes')
+    .update({
+      is_used: true,
+      used_by: profile.id,
+      used_at: new Date().toISOString(),
+    })
+    .eq('id', inviteCode.id)
+    .eq('is_used', false)
+
+  if (updateCodeError) {
+    await sendTelegramMessage(chatId, 'Статус обновлён, но код не удалось пометить использованным. Сообщите Бударину.')
+    return
+  }
+
+  await sendTelegramMessage(chatId, 'Готово. Статус Пользователь+ активирован.', {
+    reply_markup: mainMenuKeyboard({ isOwner: isOwnerProfile({ ...profile, account_type: 'user_plus', role: 'user_plus' }) }),
   })
 }
 
@@ -523,6 +637,7 @@ async function handleMessage(update) {
   const from = message.from
   const text = message.text.trim()
   const startMatch = text.match(/^\/start(?:@\w+)?\s+(TG-[0-9]{4}[A-Z]{2})$/i)
+  const plusMatch = text.match(/^\/kodPlus(?:@\w+)?\s+(Plus[0-9]{4}[A-Z]{2})$/i)
   const pureCodeMatch = text.match(/^(TG-[0-9]{4}[A-Z]{2})$/i)
   const profile = await getLinkedProfile(from.id)
 
@@ -554,6 +669,15 @@ async function handleMessage(update) {
 
   if (!profile) {
     await sendTelegramMessage(chatId, 'Сначала привяжите Telegram в профиле на сайте.')
+    return
+  }
+
+  if (plusMatch) {
+    await handlePlusCode({
+      chatId,
+      profile,
+      code: plusMatch[1],
+    })
     return
   }
 
@@ -657,7 +781,11 @@ async function handleMessage(update) {
     return
   }
 
-  await sendMainMenu(chatId, profile)
+  await saveNormalDialogMessage({
+    chatId,
+    profile,
+    text,
+  })
 }
 
 export const handler = async (event) => {

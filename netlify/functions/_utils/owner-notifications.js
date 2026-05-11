@@ -19,7 +19,8 @@ function normalizeEmail(email) {
 }
 
 function isOwnerProfile(profile) {
-  return profile?.role === 'owner'
+  return profile?.account_type === 'owner'
+    || profile?.role === 'owner'
     || normalizeEmail(profile?.email) === normalizeEmail(ownerEmail)
 }
 
@@ -34,11 +35,26 @@ function getSourceLabel(source) {
   return source === 'telegram' ? 'Telegram' : 'сайт'
 }
 
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /account_type|column|schema cache/i.test(error?.message || '')
+}
+
 async function getTelegramOwners(supabase) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('profiles')
-    .select('id, email, role, telegram_user_id')
+    .select('id, email, role, account_type, telegram_user_id')
     .not('telegram_user_id', 'is', null)
+
+  if (error && isMissingSchemaColumn(error)) {
+    const fallback = await supabase
+      .from('profiles')
+      .select('id, email, role, telegram_user_id')
+      .not('telegram_user_id', 'is', null)
+
+    data = fallback.data
+    error = fallback.error
+  }
 
   if (error) {
     console.warn('Could not load owner Telegram profiles:', error.message)

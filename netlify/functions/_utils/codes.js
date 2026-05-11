@@ -14,3 +14,7 @@ export function generateInviteCode() {
 export function generateTelegramLinkCode() {
   return `TG-${generateShortCode()}`
 }
+
+export function generatePlusInviteCode() {
+  return `Plus${generateShortCode()}`
+}

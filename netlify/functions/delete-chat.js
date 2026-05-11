@@ -21,11 +21,12 @@ function normalizeEmail(email) {
 async function isOwner(user) {
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, account_type')
     .eq('id', user.id)
     .maybeSingle()
 
-  return profile?.role === 'owner'
+  return profile?.account_type === 'owner'
+    || profile?.role === 'owner'
     || normalizeEmail(user.email) === normalizeEmail(ownerEmail)
 }
 
