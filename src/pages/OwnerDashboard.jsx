@@ -206,10 +206,7 @@ export default function OwnerDashboard({ onBack }) {
 
   return (
     <div className="page-stack">
-      <section className="hero-card black">
-        <h2>Кабинет владельца</h2>
-        <p>Рабочая панель для чатов, вопросов, AI-черновиков и финальных ответов.</p>
-      </section>
+
 
       <OwnerChatPanel />
 
