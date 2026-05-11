@@ -223,6 +223,8 @@ label {
   height: auto;
   margin-inline: auto;
   object-fit: contain;
+
+  margin: auto 0;
 }
 
 .wordmark.small {
@@ -232,6 +234,8 @@ label {
 
 .wordmark.light {
   filter: none;
+  
+  margin: auto 0;
 }
 
 .brand-logo-vertical {
@@ -1999,13 +2003,11 @@ button.icon {
 
   .chat-page .chat-list {
     display: grid;
-    grid-auto-flow: row;
-    grid-auto-columns: auto;
-    grid-template-columns: 1fr;
-    overflow-x: hidden;
-    overflow-y: auto;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(220px, 78vw);
+    overflow-x: auto;
+    overflow-y: hidden;
     padding-bottom: 4px;
-    width: 100%;
   }
 
   .chat-page .chat-main {
@@ -2054,19 +2056,13 @@ button.icon {
   }
 
   .chat-page .importance-pills {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    overflow-x: hidden;
-    flex-wrap: wrap;
-    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
     padding-bottom: 2px;
   }
 
   .chat-page .importance-pill {
-    min-width: 0;
-    width: 100%;
-    padding-inline: 8px;
-    white-space: nowrap;
+    flex: 0 0 auto;
   }
 
   .chat-page .message-bubble {
@@ -2074,14 +2070,8 @@ button.icon {
   }
 
   .mobile-floating-nav {
-    right: auto;
-    left: 12px;
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .mobile-nav-panel {
-    right: auto;
-    left: 0;
+    right: 12px;
+    bottom: calc(82px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -2107,187 +2097,5 @@ button.icon {
     width: 46px;
     height: 46px;
     min-height: 46px;
-  }
-
-  .chat-page .importance-pills {
-    gap: 6px;
-  }
-
-  .chat-page .importance-pill {
-    min-height: 34px;
-    font-size: 11px;
-  }
-}
-
-.sup-card {
-  padding: 0;
-  overflow: hidden;
-}
-
-.sup-shell {
-  display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  min-height: calc(100svh - 140px);
-  background: #ffffff;
-}
-
-.sup-sidebar {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  border-right: 1px solid var(--soft-line);
-  background: #fbfbfb;
-  padding: 18px;
-  min-width: 0;
-}
-
-.sup-main {
-  display: grid;
-  align-content: start;
-  gap: 18px;
-  min-width: 0;
-  padding: 18px;
-}
-
-.sup-list,
-.sup-mini-list {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.sup-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  border: 1px solid var(--soft-line);
-  border-radius: 18px;
-  background: #fff;
-  padding: 18px;
-}
-
-.sup-header h3 {
-  font-size: clamp(24px, 3vw, 40px);
-}
-
-.sup-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.sup-grid.two {
-  align-items: start;
-}
-
-.sup-form {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.sup-form input,
-.sup-form select,
-.sup-form textarea {
-  border-width: 1px;
-  border-color: var(--soft-line);
-  border-radius: 14px;
-  padding: 12px 14px;
-}
-
-.sup-form textarea {
-  min-height: 92px;
-}
-
-.sup-row,
-.sup-task-card {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  border: 1px solid var(--soft-line);
-  border-radius: 16px;
-  background: #fff;
-  padding: 12px;
-  text-align: left;
-}
-
-.sup-row > div,
-.sup-task-card {
-  min-width: 0;
-}
-
-.sup-row small,
-.sup-task-card small,
-.sup-task-card span {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.sup-task-card.active {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
-}
-
-.sup-task-card.active strong,
-.sup-task-card.active span,
-.sup-task-card.active small {
-  color: #fff;
-}
-
-.sup-row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.sup-row-actions select {
-  width: min(180px, 100%);
-  min-height: 36px;
-  border-width: 1px;
-  border-color: var(--soft-line);
-  border-radius: 12px;
-  padding: 8px 10px;
-}
-
-.file-control {
-  display: grid;
-  gap: 8px;
-  border: 1px dashed var(--soft-line);
-  border-radius: 16px;
-  padding: 12px;
-  color: var(--graphite);
-  font-weight: 750;
-}
-
-.file-control input {
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-}
-
-@media (max-width: 920px) {
-  .sup-shell,
-  .sup-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .sup-sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--soft-line);
-  }
-
-  .sup-header {
-    display: grid;
-  }
-
-  .sup-row {
-    display: grid;
   }
 }
