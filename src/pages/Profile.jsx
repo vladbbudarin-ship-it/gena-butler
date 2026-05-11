@@ -16,10 +16,23 @@ function formatDateTime(value) {
   }).format(new Date(value))
 }
 
+function getAccountRoleLabel(profile, isOwner) {
+  if (isOwner || profile?.role === 'owner') {
+    return 'Бударин'
+  }
+
+  if (profile?.role === 'user_plus') {
+    return 'Пользователь+'
+  }
+
+  return 'Пользователь'
+}
+
 export default function Profile({
   user,
   onLogout,
   onOpenMyQuestions,
+  onOpenProjects,
   onOpenOwnerDashboard,
 }) {
   const ownerEmail = import.meta.env.VITE_OWNER_EMAIL
@@ -137,7 +150,7 @@ export default function Profile({
           <div className="meta-row">
             <span>Роль</span>
             <span className={`badge${isOwner ? ' dark' : ''}`}>
-              {isOwner ? 'Бударин' : 'Пользователь'}
+              {getAccountRoleLabel(profile, isOwner)}
             </span>
           </div>
         </div>
@@ -147,6 +160,10 @@ export default function Profile({
         <div className="button-row" style={{ marginTop: '24px' }}>
           <button onClick={onOpenMyQuestions}>
             Чаты
+          </button>
+
+          <button className="secondary" onClick={onOpenProjects}>
+            Проекты
           </button>
 
           <button className="secondary" onClick={handleCopyPublicId} disabled={!profile?.public_id}>

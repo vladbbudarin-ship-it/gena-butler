@@ -217,6 +217,7 @@ async function sendMainMenu(chatId, profile) {
     reply_markup: mainMenuKeyboard({
       isOwner: isOwnerProfile(profile),
     }),
+  })
 }
 
 async function handleStartLink({ chatId, from, code }) {
@@ -278,6 +279,7 @@ async function handleStartLink({ chatId, from, code }) {
     ...profile,
     telegram_user_id: from.id,
     telegram_username: getTelegramUsername(from),
+  })
 }
 
 async function saveNormalDialogMessage({ chatId, profile, text }) {
@@ -521,17 +523,24 @@ async function handleMessage(update) {
   const from = message.from
   const text = message.text.trim()
   const startMatch = text.match(/^\/start(?:@\w+)?\s+(TG-[0-9]{4}[A-Z]{2})$/i)
+  const pureCodeMatch = text.match(/^(TG-[0-9]{4}[A-Z]{2})$/i)
+  const profile = await getLinkedProfile(from.id)
 
-  if (startMatch) {
+  if (startMatch || pureCodeMatch) {
+    if (profile) {
+      await sendTelegramMessage(chatId, 'Telegram уже привязан к профилю.', {
+        reply_markup: mainMenuKeyboard({ isOwner: isOwnerProfile(profile) }),
+      })
+      return
+    }
+
     await handleStartLink({
       chatId,
       from,
-      code: startMatch[1],
+      code: (startMatch || pureCodeMatch)[1],
     })
     return
   }
-
-  const profile = await getLinkedProfile(from.id)
 
   if (text.startsWith('/start')) {
     if (!profile) {

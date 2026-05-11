@@ -43,6 +43,29 @@ async function loadLatestMessages(conversationIds) {
     .order('created_at', { ascending: false })
 }
 
+async function loadOwnerConversations() {
+  const withHiddenField = await supabase
+    .from('conversations')
+    .select('id, user_id, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at, owner_hidden_at')
+    .eq('type', 'owner')
+    .is('owner_hidden_at', null)
+    .order('last_message_at', { ascending: false })
+
+  if (!withHiddenField.error) {
+    return withHiddenField
+  }
+
+  if (!isMissingSchemaColumn(withHiddenField.error)) {
+    return withHiddenField
+  }
+
+  return supabase
+    .from('conversations')
+    .select('id, user_id, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at')
+    .eq('type', 'owner')
+    .order('last_message_at', { ascending: false })
+}
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase()
 }
@@ -93,11 +116,7 @@ export const handler = async (event) => {
       return jsonResponse(403, { error: 'Доступ разрешён только владельцу.' })
     }
 
-    const { data: conversations, error: conversationsError } = await supabase
-      .from('conversations')
-      .select('id, user_id, status, owner_last_read_at, user_last_read_at, last_message_at, created_at, updated_at')
-      .eq('type', 'owner')
-      .order('last_message_at', { ascending: false })
+    const { data: conversations, error: conversationsError } = await loadOwnerConversations()
 
     if (conversationsError) {
       return jsonResponse(500, {

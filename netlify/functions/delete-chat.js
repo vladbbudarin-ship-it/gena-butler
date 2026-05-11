@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const ownerEmail = process.env.OWNER_EMAIL
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
@@ -11,6 +12,21 @@ function jsonResponse(statusCode, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }
+}
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase()
+}
+
+async function isOwner(user) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  return profile?.role === 'owner'
+    || normalizeEmail(user.email) === normalizeEmail(ownerEmail)
 }
 
 async function getUserFromEvent(event) {
@@ -63,7 +79,24 @@ export const handler = async (event) => {
     }
 
     if (conversation.type === 'owner') {
-      return jsonResponse(400, { error: 'Чат с Будариным удалить нельзя.' })
+      if (!(await isOwner(user))) {
+        return jsonResponse(400, { error: 'Чат с Будариным удалить нельзя.' })
+      }
+
+      const { error: hideOwnerChatError } = await supabase
+        .from('conversations')
+        .update({ owner_hidden_at: new Date().toISOString() })
+        .eq('id', conversationId)
+        .eq('type', 'owner')
+
+      if (hideOwnerChatError) {
+        return jsonResponse(500, {
+          error: 'Не удалось скрыть чат из списка. Проверьте, что SQL-файл supabase/chat-delete-schema.sql выполнен в Supabase.',
+          details: hideOwnerChatError.message,
+        })
+      }
+
+      return jsonResponse(200, { success: true })
     }
 
     const { data: participant, error: participantError } = await supabase
@@ -92,7 +125,7 @@ export const handler = async (event) => {
 
     if (updateError) {
       return jsonResponse(500, {
-        error: 'Не удалось удалить чат из списка.',
+        error: 'Не удалось удалить чат из списка. Проверьте, что SQL-файл supabase/chat-delete-schema.sql выполнен в Supabase.',
         details: updateError.message,
       })
     }

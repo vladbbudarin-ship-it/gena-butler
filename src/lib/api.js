@@ -522,3 +522,557 @@ export async function ownerAction({
 
   return result
 }
+
+async function getRequiredSession() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    throw new Error('Сначала войдите в аккаунт.')
+  }
+
+  return session
+}
+
+async function loadProfilesByIds(userIds) {
+  const ids = [...new Set((userIds || []).filter(Boolean))]
+
+  if (ids.length === 0) {
+    return {}
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, name, public_id, role')
+    .in('id', ids)
+
+  if (error) {
+    throw new Error(`Не удалось загрузить профили. ${error.message}`)
+  }
+
+  return Object.fromEntries((data || []).map((profile) => [profile.id, profile]))
+}
+
+export async function getSupProjects() {
+  await getRequiredSession()
+
+  const { data, error } = await supabase
+    .from('sup_projects')
+    .select('*')
+    .order('updated_at', { ascending: false })
+
+  if (error) {
+    throw new Error(`Не удалось загрузить проекты. ${error.message}`)
+  }
+
+  const projectIds = (data || []).map((project) => project.id)
+  const { data: members, error: membersError } = await supabase
+    .from('sup_project_members')
+    .select('project_id, user_id, position_title, access_level')
+    .in('project_id', projectIds.length ? projectIds : ['00000000-0000-0000-0000-000000000000'])
+
+  if (membersError) {
+    throw new Error(`Не удалось загрузить участников. ${membersError.message}`)
+  }
+
+  const profilesById = await loadProfilesByIds((members || []).map((member) => member.user_id))
+  const membersByProject = {}
+
+  for (const member of members || []) {
+    if (!membersByProject[member.project_id]) {
+      membersByProject[member.project_id] = []
+    }
+    membersByProject[member.project_id].push({
+      ...member,
+      profile: profilesById[member.user_id] || null,
+    })
+  }
+
+  return (data || []).map((project) => ({
+    ...project,
+    members: membersByProject[project.id] || [],
+  }))
+}
+
+export async function createSupProject({ title, description, status, aiContext }) {
+  const session = await getRequiredSession()
+
+  const { data: project, error: projectError } = await supabase
+    .from('sup_projects')
+    .insert({
+      title,
+      description,
+      status,
+      ai_context: aiContext,
+      created_by: session.user.id,
+    })
+    .select('*')
+    .single()
+
+  if (projectError) {
+    throw new Error(`Не удалось создать проект. ${projectError.message}`)
+  }
+
+  const { error: memberError } = await supabase
+    .from('sup_project_members')
+    .insert({
+      project_id: project.id,
+      user_id: session.user.id,
+      position_title: 'Создатель',
+      access_level: 'admin',
+    })
+
+  if (memberError) {
+    throw new Error(`Проект создан, но не удалось добавить администратора. ${memberError.message}`)
+  }
+
+  return project
+}
+
+export async function updateSupProject(projectId, { title, description, status, aiContext }) {
+  await getRequiredSession()
+
+  const { data, error } = await supabase
+    .from('sup_projects')
+    .update({
+      title,
+      description,
+      status,
+      ai_context: aiContext,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', projectId)
+    .select('*')
+    .single()
+
+  if (error) {
+    throw new Error(`Не удалось обновить проект. ${error.message}`)
+  }
+
+  return data
+}
+
+export async function addSupProjectMember({ projectId, userPublicId, positionTitle, accessLevel }) {
+  await getRequiredSession()
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('public_id', userPublicId)
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(`Не удалось найти пользователя. ${profileError.message}`)
+  }
+
+  if (!profile) {
+    throw new Error('Пользователь с таким ID не найден.')
+  }
+
+  const { error } = await supabase
+    .from('sup_project_members')
+    .upsert({
+      project_id: projectId,
+      user_id: profile.id,
+      position_title: positionTitle,
+      access_level: accessLevel,
+    }, { onConflict: 'project_id,user_id' })
+
+  if (error) {
+    throw new Error(`Не удалось добавить участника. ${error.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function updateSupProjectMember({ projectId, userId, positionTitle, accessLevel }) {
+  await getRequiredSession()
+
+  const { error } = await supabase
+    .from('sup_project_members')
+    .update({
+      position_title: positionTitle,
+      access_level: accessLevel,
+    })
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+
+  if (error) {
+    throw new Error(`Не удалось обновить участника. ${error.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function removeSupProjectMember({ projectId, userId }) {
+  await getRequiredSession()
+
+  const { error } = await supabase
+    .from('sup_project_members')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+
+  if (error) {
+    throw new Error(`Не удалось удалить участника. ${error.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function getSupProjectDetails(projectId) {
+  await getRequiredSession()
+
+  const [projectResult, membersResult, tasksResult, filesResult, suggestionsResult] = await Promise.all([
+    supabase
+      .from('sup_projects')
+      .select('*')
+      .eq('id', projectId)
+      .single(),
+    supabase
+      .from('sup_project_members')
+      .select('user_id, position_title, access_level')
+      .eq('project_id', projectId),
+    supabase
+      .from('sup_tasks')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('sup_project_files')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('sup_ai_suggestions')
+      .select('*')
+      .eq('project_id', projectId)
+      .is('task_id', null)
+      .order('created_at', { ascending: false })
+      .limit(10),
+  ])
+
+  if (projectResult.error) {
+    throw new Error(`Не удалось открыть проект. ${projectResult.error.message}`)
+  }
+
+  if (membersResult.error) {
+    throw new Error(`Не удалось загрузить участников. ${membersResult.error.message}`)
+  }
+
+  if (tasksResult.error) {
+    throw new Error(`Не удалось загрузить задачи. ${tasksResult.error.message}`)
+  }
+
+  const profileIds = [
+    ...(membersResult.data || []).map((member) => member.user_id),
+    ...(tasksResult.data || []).map((task) => task.assignee_id),
+    ...(tasksResult.data || []).map((task) => task.created_by),
+  ]
+  const profilesById = await loadProfilesByIds(profileIds)
+
+  return {
+    project: projectResult.data,
+    members: (membersResult.data || []).map((member) => ({
+      ...member,
+      profile: profilesById[member.user_id] || null,
+    })),
+    tasks: (tasksResult.data || []).map((task) => ({
+      ...task,
+      assignee: profilesById[task.assignee_id] || null,
+      creator: profilesById[task.created_by] || null,
+    })),
+    files: filesResult.data || [],
+    suggestions: suggestionsResult.data || [],
+  }
+}
+
+export async function createSupTask({
+  projectId,
+  title,
+  description,
+  status = 'todo',
+  priority = 'normal',
+  visibility = 'project_public',
+  assigneeId,
+  dueDate,
+  customUserIds = [],
+}) {
+  const session = await getRequiredSession()
+
+  const { data: task, error } = await supabase
+    .from('sup_tasks')
+    .insert({
+      project_id: projectId,
+      title,
+      description,
+      status,
+      priority,
+      visibility,
+      assignee_id: assigneeId || null,
+      due_date: dueDate || null,
+      created_by: session.user.id,
+    })
+    .select('*')
+    .single()
+
+  if (error) {
+    throw new Error(`Не удалось создать задачу. ${error.message}`)
+  }
+
+  if (visibility === 'custom' && customUserIds.length > 0) {
+    const rows = customUserIds.map((userId) => ({ task_id: task.id, user_id: userId }))
+    const { error: visibilityError } = await supabase
+      .from('sup_task_visible_members')
+      .insert(rows)
+
+    if (visibilityError) {
+      throw new Error(`Задача создана, но доступы не сохранены. ${visibilityError.message}`)
+    }
+  }
+
+  return task
+}
+
+export async function updateSupTask(taskId, updates) {
+  await getRequiredSession()
+
+  const { data, error } = await supabase
+    .from('sup_tasks')
+    .update({
+      title: updates.title,
+      description: updates.description,
+      status: updates.status,
+      priority: updates.priority,
+      visibility: updates.visibility,
+      assignee_id: updates.assigneeId || null,
+      due_date: updates.dueDate || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', taskId)
+    .select('*')
+    .single()
+
+  if (error) {
+    throw new Error(`Не удалось обновить задачу. ${error.message}`)
+  }
+
+  return data
+}
+
+export async function setSupTaskStatus(taskId, status) {
+  await getRequiredSession()
+
+  const patch = {
+    status,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (status === 'review') {
+    patch.completed_at = new Date().toISOString()
+  }
+
+  if (status === 'done') {
+    patch.accepted_at = new Date().toISOString()
+  }
+
+  const { error } = await supabase
+    .from('sup_tasks')
+    .update(patch)
+    .eq('id', taskId)
+
+  if (error) {
+    throw new Error(`Не удалось изменить статус задачи. ${error.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function getSupTaskDetails(taskId) {
+  await getRequiredSession()
+
+  const [taskResult, updatesResult, commentsResult, filesResult, suggestionsResult, visibleResult] = await Promise.all([
+    supabase
+      .from('sup_tasks')
+      .select('*')
+      .eq('id', taskId)
+      .single(),
+    supabase
+      .from('sup_task_updates')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('sup_task_comments')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('sup_task_files')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('sup_ai_suggestions')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false })
+      .limit(10),
+    supabase
+      .from('sup_task_visible_members')
+      .select('user_id')
+      .eq('task_id', taskId),
+  ])
+
+  if (taskResult.error) {
+    throw new Error(`Не удалось открыть задачу. ${taskResult.error.message}`)
+  }
+
+  const profilesById = await loadProfilesByIds([
+    taskResult.data?.assignee_id,
+    taskResult.data?.created_by,
+    ...(updatesResult.data || []).map((row) => row.user_id),
+    ...(commentsResult.data || []).map((row) => row.user_id),
+  ])
+
+  return {
+    task: {
+      ...taskResult.data,
+      assignee: profilesById[taskResult.data?.assignee_id] || null,
+      creator: profilesById[taskResult.data?.created_by] || null,
+    },
+    updates: (updatesResult.data || []).map((row) => ({
+      ...row,
+      profile: profilesById[row.user_id] || null,
+    })),
+    comments: (commentsResult.data || []).map((row) => ({
+      ...row,
+      profile: profilesById[row.user_id] || null,
+    })),
+    files: filesResult.data || [],
+    suggestions: suggestionsResult.data || [],
+    visibleUserIds: (visibleResult.data || []).map((row) => row.user_id),
+  }
+}
+
+export async function addSupTaskUpdate(taskId, body) {
+  const session = await getRequiredSession()
+
+  const { error } = await supabase
+    .from('sup_task_updates')
+    .insert({
+      task_id: taskId,
+      user_id: session.user.id,
+      body,
+    })
+
+  if (error) {
+    throw new Error(`Не удалось добавить дополнение. ${error.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function addSupTaskComment(taskId, body) {
+  const session = await getRequiredSession()
+
+  const { error } = await supabase
+    .from('sup_task_comments')
+    .insert({
+      task_id: taskId,
+      user_id: session.user.id,
+      body,
+    })
+
+  if (error) {
+    throw new Error(`Не удалось добавить комментарий. ${error.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function uploadSupProjectFile(projectId, file) {
+  const session = await getRequiredSession()
+  const storagePath = `projects/${projectId}/${Date.now()}-${file.name}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('sup-project-files')
+    .upload(storagePath, file, { upsert: false })
+
+  if (uploadError) {
+    throw new Error(`Не удалось загрузить файл. ${uploadError.message}`)
+  }
+
+  const { error: insertError } = await supabase
+    .from('sup_project_files')
+    .insert({
+      project_id: projectId,
+      uploaded_by: session.user.id,
+      storage_path: storagePath,
+      file_name: file.name,
+      mime_type: file.type || null,
+      file_size: file.size,
+    })
+
+  if (insertError) {
+    throw new Error(`Файл загружен, но запись не сохранена. ${insertError.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function uploadSupTaskFile(taskId, file) {
+  const session = await getRequiredSession()
+  const storagePath = `tasks/${taskId}/${Date.now()}-${file.name}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('sup-project-files')
+    .upload(storagePath, file, { upsert: false })
+
+  if (uploadError) {
+    throw new Error(`Не удалось загрузить файл. ${uploadError.message}`)
+  }
+
+  const { error: insertError } = await supabase
+    .from('sup_task_files')
+    .insert({
+      task_id: taskId,
+      uploaded_by: session.user.id,
+      storage_path: storagePath,
+      file_name: file.name,
+      mime_type: file.type || null,
+      file_size: file.size,
+    })
+
+  if (insertError) {
+    throw new Error(`Файл загружен, но запись не сохранена. ${insertError.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function createSupAiSuggestion({ projectId, taskId, prompt }) {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/sup-ai-assistant', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      project_id: projectId,
+      task_id: taskId,
+      prompt,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось получить AI-предложение.'))
+  }
+
+  return result.suggestion
+}

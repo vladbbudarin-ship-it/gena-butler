@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { deleteMessage, getOwnerChat, getOwnerChats, sendChatMessage } from '../lib/api'
+import { deleteChat, deleteMessage, getOwnerChat, getOwnerChats, sendChatMessage } from '../lib/api'
 
 const roleLabels = {
   user: 'Пользователь',
@@ -225,6 +225,30 @@ export default function OwnerChatPanel() {
     }
   }
 
+  async function handleHideSelectedConversation() {
+    if (!selectedConversationId) {
+      return
+    }
+
+    if (!window.confirm('Скрыть чат из списка?')) {
+      return
+    }
+
+    try {
+      setMessage('')
+      await deleteChat(selectedConversationId)
+      const nextConversations = conversations.filter((conversation) => conversation.id !== selectedConversationId)
+      setConversations(nextConversations)
+      setSelectedConversationId(nextConversations[0]?.id || null)
+      if (nextConversations.length === 0) {
+        setSelectedConversation(null)
+        setMessages([])
+      }
+    } catch (error) {
+      setMessage(error.message)
+    }
+  }
+
   function handleReplyTextChange(event) {
     setReplyText(event.target.value)
     resizeComposerTextarea(event.target)
@@ -331,6 +355,14 @@ export default function OwnerChatPanel() {
             </div>
 
             <div className="toolbar">
+              <button
+                className="danger ghost"
+                type="button"
+                onClick={handleHideSelectedConversation}
+                disabled={!selectedConversationId}
+              >
+                Скрыть
+              </button>
               <button onClick={refreshCurrentChat} disabled={!selectedConversationId || loadingChat}>
                 Обновить чат
               </button>
