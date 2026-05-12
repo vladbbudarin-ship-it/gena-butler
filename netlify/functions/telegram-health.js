@@ -1,6 +1,10 @@
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET
 const telegramBotUsername = process.env.TELEGRAM_BOT_USERNAME
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const openaiApiKey = process.env.OPENAI_API_KEY
+const ownerEmail = process.env.OWNER_EMAIL
 
 function jsonResponse(statusCode, body) {
   return {
@@ -44,6 +48,10 @@ export const handler = async (event) => {
         hasTelegramBotToken: Boolean(telegramBotToken),
         hasTelegramWebhookSecret: Boolean(telegramWebhookSecret),
         hasTelegramBotUsername: Boolean(telegramBotUsername),
+        hasSupabaseUrl: Boolean(supabaseUrl),
+        hasSupabaseServiceRoleKey: Boolean(supabaseServiceRoleKey),
+        hasOpenaiApiKey: Boolean(openaiApiKey),
+        hasOwnerEmail: Boolean(ownerEmail),
         botUsername: telegramBotUsername || null,
       },
       botInfo,

@@ -19,7 +19,19 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET
 const ownerEmail = process.env.OWNER_EMAIL
 
-const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
+let supabase = null
+
+function getSupabaseClient() {
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing in Netlify environment variables.')
+  }
+
+  if (!supabase) {
+    supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
+  }
+
+  return supabase
+}
 
 const telegramLinkCodePattern = /^TG-[0-9]{4}[A-Z]{2}$/
 const plusCodePattern = /^Plus[0-9]{4}[A-Z]{2}$/
@@ -802,6 +814,8 @@ async function handleMessage(update) {
 
 export const handler = async (event) => {
   try {
+    supabase = getSupabaseClient()
+
     if (event.httpMethod !== 'POST') {
       return jsonResponse(405, { error: 'Method not allowed' })
     }

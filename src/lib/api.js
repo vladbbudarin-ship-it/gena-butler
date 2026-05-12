@@ -845,9 +845,13 @@ export async function createSupTask({
 }) {
   const session = await getRequiredSession()
 
-  const { data: task, error } = await supabase
-    .from('sup_tasks')
-    .insert({
+  const response = await fetch('/.netlify/functions/create-sup-task', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
       project_id: projectId,
       title,
       description,
@@ -856,27 +860,17 @@ export async function createSupTask({
       visibility,
       assignee_id: assigneeId || null,
       due_date: dueDate || null,
-      created_by: session.user.id,
-    })
-    .select('*')
-    .single()
+      custom_user_ids: customUserIds,
+    }),
+  })
 
-  if (error) {
-    throw new Error(`Не удалось создать задачу. ${error.message}`)
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось создать задачу.'))
   }
 
-  if (visibility === 'custom' && customUserIds.length > 0) {
-    const rows = customUserIds.map((userId) => ({ task_id: task.id, user_id: userId }))
-    const { error: visibilityError } = await supabase
-      .from('sup_task_visible_members')
-      .insert(rows)
-
-    if (visibilityError) {
-      throw new Error(`Задача создана, но доступы не сохранены. ${visibilityError.message}`)
-    }
-  }
-
-  return task
+  return result.task
 }
 
 export async function updateSupTask(taskId, updates) {
