@@ -116,9 +116,6 @@ export const handler = async (event) => {
 
     const profile = await getProfile(user)
 
-    if (!canUseSup(profile, user)) {
-      return jsonResponse(403, { error: 'Создавать задачи могут только Пользователь+ и Бударин.' })
-    }
 
     const body = JSON.parse(event.body || '{}')
     const projectId = String(body.project_id || '').trim()
