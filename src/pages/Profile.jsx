@@ -33,6 +33,7 @@ export default function Profile({
   onLogout,
   onOpenMyQuestions,
   onOpenProjects,
+  onOpenPlusDashboard,
   onOpenOwnerDashboard,
 }) {
   const ownerEmail = import.meta.env.VITE_OWNER_EMAIL
@@ -45,6 +46,7 @@ export default function Profile({
   const [telegramLink, setTelegramLink] = useState(null)
   const [telegramMessage, setTelegramMessage] = useState('')
   const [telegramLoading, setTelegramLoading] = useState(false)
+  const canOpenPlusDashboard = isOwner || profile?.account_type === 'user_plus' || profile?.role === 'user_plus'
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -163,6 +165,12 @@ export default function Profile({
           <button className="secondary" onClick={onOpenProjects}>
             Проекты
           </button>
+
+          {canOpenPlusDashboard && (
+            <button className="secondary" onClick={onOpenPlusDashboard}>
+              Кабинет Пользователь+
+            </button>
+          )}
 
           <button className="secondary" onClick={handleCopyPublicId} disabled={!profile?.public_id}>
             Скопировать ID

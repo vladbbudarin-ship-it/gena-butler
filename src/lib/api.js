@@ -608,12 +608,51 @@ async function loadProfilesByIds(userIds) {
 }
 
 export async function getSupProjects() {
-  await getRequiredSession()
+  const session = await getRequiredSession()
 
-  const { data, error } = await supabase
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, email, role, account_type')
+    .eq('id', session.user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(`Не удалось проверить права доступа к проектам. ${profileError.message}`)
+  }
+
+  const isOwner = session.user.email === import.meta.env.VITE_OWNER_EMAIL
+    || profile?.account_type === 'owner'
+    || ['owner', 'admin'].includes(profile?.role)
+
+  let allowedProjectIds = null
+
+  if (!isOwner) {
+    const { data: myMemberships, error: membershipError } = await supabase
+      .from('sup_project_members')
+      .select('project_id')
+      .eq('user_id', session.user.id)
+
+    if (membershipError) {
+      throw new Error(`Не удалось загрузить ваши проекты. ${membershipError.message}`)
+    }
+
+    allowedProjectIds = [...new Set((myMemberships || []).map((member) => member.project_id).filter(Boolean))]
+
+    if (allowedProjectIds.length === 0) {
+      return []
+    }
+  }
+
+  let projectQuery = supabase
     .from('sup_projects')
     .select('*')
     .order('updated_at', { ascending: false })
+
+  if (allowedProjectIds) {
+    projectQuery = projectQuery.in('id', allowedProjectIds)
+  }
+
+  const { data, error } = await projectQuery
 
   if (error) {
     throw new Error(`Не удалось загрузить проекты. ${error.message}`)
@@ -646,6 +685,29 @@ export async function getSupProjects() {
     ...project,
     members: membersByProject[project.id] || [],
   }))
+}
+
+export async function deleteSupProject(projectId) {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/delete-sup-project', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      project_id: projectId,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось удалить проект.'))
+  }
+
+  return result
 }
 
 export async function createSupProject({ title, description, status, aiContext }) {

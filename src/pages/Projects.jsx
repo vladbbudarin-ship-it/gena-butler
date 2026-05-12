@@ -6,6 +6,7 @@ import {
   createSupAiSuggestion,
   createSupProject,
   createSupTask,
+  deleteSupProject,
   getMyProfile,
   getSupProjectDetails,
   getSupProjects,
@@ -52,6 +53,13 @@ const accessLabels = {
   manager: 'Менеджер',
   member: 'Участник',
   viewer: 'Наблюдатель',
+}
+
+const accessHelp = {
+  admin: 'Полный управляющий проекта. Может редактировать проект, менять AI-контекст, добавлять и удалять участников, менять их должности и доступ, создавать и редактировать задачи, принимать задачи или возвращать на доработку.',
+  manager: 'Работает с задачами. Может создавать и редактировать задачи, назначать исполнителей, менять статусы задач, принимать задачи или возвращать их на доработку. Но управление участниками и настройками проекта обычно остаётся у администратора.',
+  member: 'Обычный исполнитель внутри проекта. Видит доступные ему задачи, может работать со своими задачами, писать комментарии, добавлять дополнения и нажимать «Выполнено» по задаче, где он назначен исполнителем. Не управляет проектом и участниками.',
+  viewer: 'Режим просмотра. Может видеть проект и доступные задачи, но не должен создавать, редактировать или менять статусы. Это роль “посмотреть, быть в курсе”.',
 }
 
 const projectTabs = [
@@ -124,7 +132,9 @@ export default function Projects({ user, onBack }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [showCreateProject, setShowCreateProject] = useState(false)
+  const [showCreateTask, setShowCreateTask] = useState(false)
   const [showPlusGuide, setShowPlusGuide] = useState(false)
+  const [activeRoleHelp, setActiveRoleHelp] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [createProjectForm, setCreateProjectForm] = useState({
     title: '',
@@ -161,6 +171,7 @@ export default function Projects({ user, onBack }) {
   const myAccess = getMyAccess(projectDetails, profile, user)
   const canManageProject = myAccess === 'admin'
   const canManageTasks = canCreate && ['admin', 'manager'].includes(myAccess)
+  const canDeleteProject = canManageProject
   const selectedTask = taskDetails?.task
   const canCompleteTask = selectedTask?.assignee_id === profile?.id && !['done', 'review'].includes(selectedTask?.status)
   const canReviewTask = selectedTask && (selectedTask.created_by === profile?.id || ['admin', 'manager'].includes(myAccess))
@@ -280,6 +291,18 @@ export default function Projects({ user, onBack }) {
     }
   }
 
+  function resetTaskForm() {
+    setTaskForm({
+      title: '',
+      description: '',
+      status: 'todo',
+      priority: 'normal',
+      visibility: 'project_public',
+      assigneeId: '',
+      dueDate: '',
+    })
+  }
+
   async function handleUpdateProject(event) {
     event.preventDefault()
     if (!selectedProjectId) {
@@ -328,9 +351,39 @@ export default function Projects({ user, onBack }) {
         ...taskForm,
         projectId: selectedProjectId,
       })
+      resetTaskForm()
+      setShowCreateTask(false)
       setSelectedTaskId(task.id)
       await loadProjectDetails(selectedProjectId)
       await loadTaskDetails(task.id)
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteProject() {
+    if (!selectedProjectId || !canDeleteProject) {
+      return
+    }
+
+    const confirmed = window.confirm('Удалить проект? Это действие нельзя отменить.')
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setBusy(true)
+      setMessage('')
+      await deleteSupProject(selectedProjectId)
+      setSelectedProjectId(null)
+      setProjectDetails(null)
+      setSelectedTaskId(null)
+      setTaskDetails(null)
+      setMessage('Проект удалён.')
+      await loadProjects(null)
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -571,6 +624,16 @@ export default function Projects({ user, onBack }) {
                     <ProjectStatusPill status={projectDetails.project.status} />
                     <span>{projectDetails.tasks.length} задач</span>
                     <span>{projectMembers.length} участников</span>
+                    {canDeleteProject && (
+                      <button
+                        className="danger-outline sup-delete-project"
+                        type="button"
+                        onClick={handleDeleteProject}
+                        disabled={busy}
+                      >
+                        Удалить проект
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -644,7 +707,18 @@ export default function Projects({ user, onBack }) {
                 {activeTab === 'tasks' && (
                   <div className="sup-grid two">
                     <section className="dashboard-card">
-                      <h4>Задачи</h4>
+                      <div className="sup-section-head">
+                        <h4>Задачи</h4>
+                        {canManageTasks && (
+                          <button
+                            className="danger sup-new-task-button"
+                            type="button"
+                            onClick={() => setShowCreateTask(true)}
+                          >
+                            + Новая задача
+                          </button>
+                        )}
+                      </div>
                       <div className="sup-mini-list">
                         {projectDetails.tasks.map((task) => (
                           <button
@@ -663,7 +737,7 @@ export default function Projects({ user, onBack }) {
                         ))}
                       </div>
 
-                      {canManageTasks && (
+                      {canManageTasks && showCreateTask && (
                         <form className="sup-form compact" onSubmit={handleCreateTask}>
                           <h4>Новая задача</h4>
                           <input value={taskForm.title} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} placeholder="Название задачи" />
@@ -679,7 +753,20 @@ export default function Projects({ user, onBack }) {
                             {memberOptions.map((member) => <option key={member.id} value={member.id}>{member.label}</option>)}
                           </select>
                           <input type="date" value={taskForm.dueDate} onChange={(event) => setTaskForm((current) => ({ ...current, dueDate: event.target.value }))} />
-                          <button type="submit" disabled={busy}>Создать задачу</button>
+                          <div className="button-row">
+                            <button type="submit" disabled={busy}>Создать задачу</button>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => {
+                                resetTaskForm()
+                                setShowCreateTask(false)
+                              }}
+                              disabled={busy}
+                            >
+                              Отмена
+                            </button>
+                          </div>
                         </form>
                       )}
                     </section>
@@ -775,7 +862,21 @@ export default function Projects({ user, onBack }) {
                         <div className="sup-row" key={member.user_id}>
                           <div>
                             <strong>{getProfileName(member.profile)}</strong>
-                            <small>{member.position_title || 'Без должности'} · {accessLabels[member.access_level]}</small>
+                            <small>{member.position_title || 'Без должности'}</small>
+                            <div className="role-help-wrap">
+                              <button
+                                className="role-help-trigger"
+                                type="button"
+                                title={accessHelp[member.access_level]}
+                                onClick={() => setActiveRoleHelp((current) => current === member.user_id ? null : member.user_id)}
+                                aria-expanded={activeRoleHelp === member.user_id}
+                              >
+                                {accessLabels[member.access_level]}
+                              </button>
+                              {activeRoleHelp === member.user_id && (
+                                <p className="role-help-text">{accessHelp[member.access_level]}</p>
+                              )}
+                            </div>
                           </div>
                           {canManageProject && (
                             <div className="sup-row-actions">

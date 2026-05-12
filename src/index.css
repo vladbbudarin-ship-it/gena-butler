@@ -2401,6 +2401,13 @@ button.icon {
   font-weight: 750;
 }
 
+.sup-delete-project {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
 .sup-tabs {
   display: flex;
   gap: 6px;
@@ -2452,6 +2459,22 @@ button.icon {
   display: grid;
   gap: 10px;
   margin-top: 12px;
+}
+
+.sup-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sup-new-task-button {
+  min-height: 34px;
+  border-color: #e11d48;
+  background: #e11d48;
+  color: #ffffff;
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 .sup-row,
@@ -2545,6 +2568,80 @@ button.icon {
 .sup-task-card.active span,
 .sup-task-card.active small {
   color: #ffffff;
+}
+
+.role-help-wrap {
+  position: relative;
+  width: fit-content;
+  margin-top: 7px;
+}
+
+.role-help-trigger {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--graphite);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.role-help-text {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  width: min(360px, 78vw);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 12px;
+  color: var(--graphite);
+  font-size: 12px;
+  box-shadow: var(--shadow-soft);
+}
+
+.plus-page {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.plus-hero {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #ffffff;
+  padding: 22px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  box-shadow: var(--shadow-soft);
+}
+
+.plus-hero h3 {
+  margin-top: 6px;
+}
+
+.plus-hero p {
+  margin-top: 8px;
+  max-width: 680px;
+}
+
+.plus-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.plus-locked {
+  max-width: 620px;
+  margin: 0 auto;
+  text-align: center;
+  display: grid;
+  gap: 14px;
 }
 
 .sup-summary-card {
@@ -2731,6 +2828,15 @@ button.icon {
 
   .sup-header-meta {
     justify-content: flex-start;
+  }
+
+  .sup-section-head,
+  .plus-hero {
+    display: grid;
+  }
+
+  .plus-grid {
+    grid-template-columns: 1fr;
   }
 }
 

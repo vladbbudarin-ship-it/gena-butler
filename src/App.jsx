@@ -6,6 +6,8 @@ import Profile from './pages/Profile'
 import MyQuestions from './pages/MyQuestions'
 import OwnerDashboard from './pages/OwnerDashboard'
 import Projects from './pages/Projects'
+import PlusDashboard from './pages/PlusDashboard'
+import { getMyProfile } from './lib/api'
 
 function BrandBadge() {
   return (
@@ -19,6 +21,7 @@ function BrandBadge() {
 function MobileFloatingNav({
   isOpen,
   isOwner,
+  isPlus,
   onToggle,
   onNavigate,
 }) {
@@ -49,6 +52,11 @@ function MobileFloatingNav({
               Кабинет Бударина
             </button>
           )}
+          {isPlus && (
+            <button className="secondary" type="button" onClick={() => onNavigate('plus')}>
+              Кабинет Пользователь+
+            </button>
+          )}
         </nav>
       )}
 
@@ -70,7 +78,22 @@ export default function App() {
   const [screen, setScreen] = useState('login')
   const [loading, setLoading] = useState(true)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const isOwner = Boolean(user?.email && user.email === import.meta.env.VITE_OWNER_EMAIL)
+  const [accountProfile, setAccountProfile] = useState(null)
+  const isOwner = Boolean(
+    (user?.email && user.email === import.meta.env.VITE_OWNER_EMAIL)
+    || accountProfile?.account_type === 'owner'
+    || ['owner', 'admin'].includes(accountProfile?.role)
+  )
+  const isPlus = Boolean(isOwner || accountProfile?.account_type === 'user_plus' || accountProfile?.role === 'user_plus')
+
+  async function loadAccountProfile() {
+    try {
+      const profile = await getMyProfile()
+      setAccountProfile(profile)
+    } catch {
+      setAccountProfile(null)
+    }
+  }
 
   function openScreen(nextScreen) {
     setScreen(nextScreen)
@@ -84,6 +107,7 @@ export default function App() {
       if (data.session?.user) {
         setUser(data.session.user)
         setScreen('profile')
+        await loadAccountProfile()
       }
 
       setLoading(false)
@@ -131,6 +155,7 @@ export default function App() {
                 onLogin={(loggedUser) => {
                   setUser(loggedUser)
                   setScreen('profile')
+                  loadAccountProfile()
                 }}
               />
             )}
@@ -168,30 +193,38 @@ export default function App() {
         >
           Проекты
         </button>
+        {isPlus && (
+          <button
+            className={screen === 'plus' ? 'active' : 'secondary'}
+            type="button"
+            onClick={() => openScreen('plus')}
+          >
+            Кабинет Пользователь+
+          </button>
+        )}
         {isOwner && (
-          <>
-            
-            <button
-              className={screen === 'owner' ? 'active' : 'secondary'}
-              type="button"
-              onClick={() => openScreen('owner')}
-            >
-              Кабинет владельца
-            </button>
-          </>
+          <button
+            className={screen === 'owner' ? 'active' : 'secondary'}
+            type="button"
+            onClick={() => openScreen('owner')}
+          >
+            Кабинет владельца
+          </button>
         )}
       </nav>
 
-      <div className={`app-frame ${screen === 'myQuestions' || screen === 'owner' || screen === 'projects' ? 'workspace-frame' : ''}`}>
+      <div className={`app-frame ${['myQuestions', 'owner', 'projects', 'plus'].includes(screen) ? 'workspace-frame' : ''}`}>
         <section className="content-panel">
           {screen === 'profile' && (
             <Profile
               user={user}
               onOpenMyQuestions={() => openScreen('myQuestions')}
               onOpenProjects={() => openScreen('projects')}
+              onOpenPlusDashboard={() => openScreen('plus')}
               onOpenOwnerDashboard={() => openScreen('owner')}
               onLogout={() => {
                 setUser(null)
+                setAccountProfile(null)
                 setScreen('login')
               }}
             />
@@ -209,6 +242,13 @@ export default function App() {
               onBack={() => openScreen('profile')}
             />
           )}
+          {screen === 'plus' && (
+            <PlusDashboard
+              user={user}
+              onBack={() => openScreen('profile')}
+              onOpenProjects={() => openScreen('projects')}
+            />
+          )}
           {screen === 'owner' && (
             <OwnerDashboard
               onBack={() => openScreen('profile')}
@@ -221,6 +261,7 @@ export default function App() {
       <MobileFloatingNav
         isOpen={mobileNavOpen}
         isOwner={isOwner}
+        isPlus={isPlus}
         onToggle={() => setMobileNavOpen((current) => !current)}
         onNavigate={openScreen}
       />
