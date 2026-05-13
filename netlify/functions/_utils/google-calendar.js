@@ -201,6 +201,20 @@ export async function getGoogleCalendarConnection({ supabase, ownerId }) {
   return data
 }
 
+async function getAnyConnectedGoogleCalendarConnection({ supabase }) {
+  const { data, error } = await supabase
+    .from('owner_google_connections')
+    .select('owner_id, google_email, access_token, refresh_token, scope, expires_at')
+    .order('updated_at', { ascending: false })
+    .limit(10)
+
+  if (error) {
+    throw error
+  }
+
+  return (data || []).find((connection) => connection.refresh_token || connection.access_token) || null
+}
+
 async function refreshAccessTokenIfNeeded({ supabase, connection }) {
   assertGoogleCalendarEnv()
 
@@ -271,12 +285,13 @@ export async function getOwnerCalendarSafeSummary({ supabase }) {
 
   try {
     const ownerProfile = await getOwnerProfile({ supabase })
+    let connection = ownerProfile?.id
+      ? await getGoogleCalendarConnection({ supabase, ownerId: ownerProfile.id })
+      : null
 
-    if (!ownerProfile?.id) {
-      return `${base.join('\n')}\nGoogle Calendar Бударина не подключён.`
+    if (!connection?.refresh_token && !connection?.access_token) {
+      connection = await getAnyConnectedGoogleCalendarConnection({ supabase })
     }
-
-    const connection = await getGoogleCalendarConnection({ supabase, ownerId: ownerProfile.id })
 
     if (!connection?.refresh_token && !connection?.access_token) {
       return `${base.join('\n')}\nGoogle Calendar Бударина не подключён.`
@@ -355,12 +370,13 @@ export async function createOwnerCalendarEvent({ supabase, calendarAction }) {
   }
 
   const ownerProfile = await getOwnerProfile({ supabase })
+  let connection = ownerProfile?.id
+    ? await getGoogleCalendarConnection({ supabase, ownerId: ownerProfile.id })
+    : null
 
-  if (!ownerProfile?.id) {
-    throw new Error('Профиль Бударина не найден для создания события.')
+  if (!connection?.refresh_token && !connection?.access_token) {
+    connection = await getAnyConnectedGoogleCalendarConnection({ supabase })
   }
-
-  const connection = await getGoogleCalendarConnection({ supabase, ownerId: ownerProfile.id })
 
   if (!connection?.refresh_token && !connection?.access_token) {
     throw new Error('Google Calendar Бударина не подключён.')

@@ -75,6 +75,7 @@ async function generateAiDraft({ questionText, urgencyLevel, calendarContext }) 
 Данные:
 - Вопрос пользователя: ${questionText}
 - Срочность от пользователя: ${urgencyLevel}
+- Календарь Бударина, безопасная сводка: ${calendarContext || 'Google Calendar недоступен.'}
 
 Верни строго JSON такого вида:
 {

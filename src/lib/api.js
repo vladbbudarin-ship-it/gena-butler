@@ -333,6 +333,34 @@ export async function registerWithInvite({
   return result
 }
 
+export async function registerWithTelegram({
+  name,
+  email,
+  password,
+  telegramAuthData,
+}) {
+  const response = await fetch('/.netlify/functions/register-with-telegram', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      email,
+      password,
+      telegram_auth_data: telegramAuthData,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось зарегистрироваться через Telegram.'))
+  }
+
+  return result
+}
+
 export async function getDirectChats() {
   const {
     data: { session },
