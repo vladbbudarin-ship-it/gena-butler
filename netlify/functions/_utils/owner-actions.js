@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { createOwnerCalendarEvent, normalizeCalendarAction } from './google-calendar.js'
 import { finalAnswerText, sendTelegramMessage } from './telegram.js'
 
 const openaiApiKey = process.env.OPENAI_API_KEY
@@ -88,6 +89,10 @@ async function getQuestion({ supabase, questionId }) {
     'source_channel',
     'telegram_chat_id',
     'telegram_message_id',
+    'calendar_action',
+    'calendar_action_status',
+    'calendar_event_id',
+    'calendar_event_link',
   ].join(', ')
 
   const { data, error } = await supabase
@@ -196,17 +201,33 @@ async function saveOwnerAnswerToChat({ supabase, ownerId, question, finalAnswerR
   return existingMessage
 }
 
-async function notifyTelegramQuestionOwner({ question, finalAnswerRu, finalAnswerZh, rejected = false }) {
-  if (question.source_channel !== 'telegram' || !question.telegram_chat_id) {
+async function notifyTelegramQuestionOwner({ supabase, question, finalAnswerRu, finalAnswerZh, rejected = false }) {
+  let targetTelegramChatId = question.source_channel === 'telegram' ? question.telegram_chat_id : null
+
+  if (!targetTelegramChatId && question.user_id) {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('telegram_user_id')
+      .eq('id', question.user_id)
+      .maybeSingle()
+
+    if (error) {
+      console.warn('Telegram user notification skipped: profile lookup failed.', error.message)
+    }
+
+    targetTelegramChatId = profile?.telegram_user_id || null
+  }
+
+  if (!targetTelegramChatId) {
     return
   }
 
   if (rejected) {
-    await sendTelegramMessage(question.telegram_chat_id, 'Ваш вопрос был отклонён.')
+    await sendTelegramMessage(targetTelegramChatId, 'Ваш вопрос был отклонён.')
     return
   }
 
-  await sendTelegramMessage(question.telegram_chat_id, finalAnswerText({
+  await sendTelegramMessage(targetTelegramChatId, finalAnswerText({
     finalAnswerRu,
     finalAnswerZh,
   }))
@@ -234,14 +255,27 @@ export async function performOwnerQuestionAction({
       throw new OwnerActionError('Нельзя утвердить вопрос без AI-черновика.', 400)
     }
 
+    const calendarAction = normalizeCalendarAction(question.calendar_action)
+    const calendarEvent = calendarAction
+      ? await createOwnerCalendarEvent({ supabase, calendarAction })
+      : null
+
+    const approveUpdate = {
+      status: 'approved',
+      final_answer_ru: question.draft_ru,
+      final_answer_zh: question.draft_zh,
+      closed_at: new Date().toISOString(),
+    }
+
+    if (calendarEvent) {
+      approveUpdate.calendar_action_status = 'created'
+      approveUpdate.calendar_event_id = calendarEvent.id
+      approveUpdate.calendar_event_link = calendarEvent.htmlLink || null
+    }
+
     const { error: updateError } = await supabase
       .from('questions')
-      .update({
-        status: 'approved',
-        final_answer_ru: question.draft_ru,
-        final_answer_zh: question.draft_zh,
-        closed_at: new Date().toISOString(),
-      })
+      .update(approveUpdate)
       .eq('id', questionId)
 
     if (updateError) {
@@ -257,6 +291,7 @@ export async function performOwnerQuestionAction({
     })
 
     await notifyTelegramQuestionOwner({
+      supabase,
       question,
       finalAnswerRu: question.draft_ru,
       finalAnswerZh: question.draft_zh,
@@ -309,6 +344,7 @@ export async function performOwnerQuestionAction({
     })
 
     await notifyTelegramQuestionOwner({
+      supabase,
       question,
       finalAnswerRu: normalizedFinalAnswerRu,
       finalAnswerZh,
@@ -336,6 +372,7 @@ export async function performOwnerQuestionAction({
   }
 
   await notifyTelegramQuestionOwner({
+    supabase,
     question,
     rejected: true,
   })

@@ -115,6 +115,65 @@ async function canViewTask(task, userId, profile) {
   return Boolean(data)
 }
 
+function isMissingSchemaColumn(error) {
+  return error?.code === 'PGRST204'
+    || /column|schema cache/i.test(error?.message || '')
+}
+
+async function loadAiSuggestions({ projectId, taskId = null }) {
+  const buildQuery = ({ includeDeletedFilter }) => {
+    let query = supabase
+      .from('sup_ai_suggestions')
+      .select('prompt, suggestion, created_at, deleted_at')
+      .eq('project_id', projectId)
+
+    if (taskId) {
+      query = query.eq('task_id', taskId)
+    } else {
+      query = query.is('task_id', null)
+    }
+
+    if (includeDeletedFilter) {
+      query = query.is('deleted_at', null)
+    }
+
+    return query
+      .order('created_at', { ascending: false })
+      .limit(10)
+  }
+
+  const { data, error } = await buildQuery({ includeDeletedFilter: true })
+
+  if (!error) {
+    return data || []
+  }
+
+  if (!isMissingSchemaColumn(error)) {
+    throw error
+  }
+
+  let fallbackQuery = supabase
+    .from('sup_ai_suggestions')
+    .select('prompt, suggestion, created_at')
+    .eq('project_id', projectId)
+
+  if (taskId) {
+    fallbackQuery = fallbackQuery.eq('task_id', taskId)
+  } else {
+    fallbackQuery = fallbackQuery.is('task_id', null)
+  }
+
+  const fallback = await fallbackQuery
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  if (fallback.error) {
+    throw fallback.error
+  }
+
+  return fallback.data || []
+}
+
 async function buildContext({ projectId, taskId, user, profile }) {
   const { data: project, error: projectError } = await supabase
     .from('sup_projects')
@@ -166,27 +225,14 @@ async function buildContext({ projectId, taskId, user, profile }) {
         .eq('task_id', task.id)
         .order('created_at', { ascending: true })
         .limit(30),
-      supabase
-        .from('sup_ai_suggestions')
-        .select('prompt, suggestion, created_at')
-        .eq('task_id', task.id)
-        .order('created_at', { ascending: false })
-        .limit(10),
+      loadAiSuggestions({ projectId: project.id, taskId: task.id }),
     ])
 
     updates = updatesResult.data || []
     comments = commentsResult.data || []
-    previousSuggestions = suggestionsResult.data || []
+    previousSuggestions = suggestionsResult || []
   } else {
-    const { data } = await supabase
-      .from('sup_ai_suggestions')
-      .select('prompt, suggestion, created_at')
-      .eq('project_id', project.id)
-      .is('task_id', null)
-      .order('created_at', { ascending: false })
-      .limit(10)
-
-    previousSuggestions = data || []
+    previousSuggestions = await loadAiSuggestions({ projectId: project.id })
   }
 
   return {

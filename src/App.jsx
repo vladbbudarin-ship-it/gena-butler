@@ -133,7 +133,7 @@ export default function App() {
         <div className="app-frame auth-frame">
           <section className="auth-card">
             <img className="wordmark" src="/brand/gena-logo-black.png" alt="Гена" />
-            <p className="auth-subtitle">Budarin&apos;s messenger</p>
+            <p className="auth-subtitle">Budarin&apos;s service</p>
 
             <nav className="auth-tabs">
               <button

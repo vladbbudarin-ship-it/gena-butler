@@ -248,6 +248,63 @@ export async function getPlusInviteCodes() {
   return result.codes || []
 }
 
+export async function getGoogleCalendarStatus() {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/google-calendar-status', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось проверить Google Calendar.'))
+  }
+
+  return result
+}
+
+export async function getGoogleCalendarAuthUrl() {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/google-calendar-auth-url', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось создать ссылку Google Calendar.'))
+  }
+
+  return result.auth_url
+}
+
+export async function disconnectGoogleCalendar() {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/disconnect-google-calendar', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось отключить Google Calendar.'))
+  }
+
+  return result
+}
+
 export async function registerWithInvite({
   name,
   email,
@@ -705,6 +762,29 @@ export async function deleteSupProject(projectId) {
 
   if (!response.ok) {
     throw new Error(getApiError(result, 'Не удалось удалить проект.'))
+  }
+
+  return result
+}
+
+export async function deleteSupAiSuggestion(suggestionId) {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/delete-sup-ai-suggestion', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      suggestion_id: suggestionId,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось удалить AI-ответ.'))
   }
 
   return result

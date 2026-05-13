@@ -1,9 +1,74 @@
 import { createClient } from '@supabase/supabase-js'
+import { TELEGRAM_SITE_URL, sendTelegramMessage, truncateText } from './_utils/telegram.js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
+
+function getDisplayName(profile) {
+  return profile?.name || profile?.public_id || 'Пользователь'
+}
+
+async function notifyDirectChatRecipients({ conversationId, senderId, messageText }) {
+  try {
+    const { data: participants, error: participantsError } = await supabase
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId)
+      .neq('user_id', senderId)
+
+    if (participantsError || !participants?.length) {
+      if (participantsError) {
+        console.warn('Direct chat notification skipped: participants lookup failed.', participantsError.message)
+      }
+      return
+    }
+
+    const recipientIds = participants.map((participant) => participant.user_id).filter(Boolean)
+
+    const [{ data: senderProfile }, { data: recipientProfiles, error: profilesError }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, name, public_id, telegram_user_id')
+        .eq('id', senderId)
+        .maybeSingle(),
+      supabase
+        .from('profiles')
+        .select('id, telegram_user_id')
+        .in('id', recipientIds),
+    ])
+
+    if (profilesError || !recipientProfiles?.length) {
+      if (profilesError) {
+        console.warn('Direct chat notification skipped: recipient profiles lookup failed.', profilesError.message)
+      }
+      return
+    }
+
+    const senderName = getDisplayName(senderProfile)
+    const senderTelegramId = senderProfile?.telegram_user_id ? String(senderProfile.telegram_user_id) : null
+    const notificationText = [
+      `Новое сообщение от: ${senderName}`,
+      '',
+      'Текст:',
+      truncateText(messageText, 1200),
+    ].join('\n')
+
+    await Promise.allSettled(
+      recipientProfiles
+        .filter((profile) => profile.telegram_user_id)
+        .filter((profile) => String(profile.telegram_user_id) !== senderTelegramId)
+        .map((profile) => sendTelegramMessage(profile.telegram_user_id, notificationText, {
+          reply_markup: {
+            inline_keyboard: [[{ text: 'Открыть сайт', url: TELEGRAM_SITE_URL }]],
+          },
+        }))
+    )
+  } catch (error) {
+    console.warn('Direct chat notification skipped:', error.message)
+  }
+}
 
 function jsonResponse(statusCode, body) {
   return {
@@ -120,6 +185,12 @@ export const handler = async (event) => {
         details: restoreError.message,
       })
     }
+
+    await notifyDirectChatRecipients({
+      conversationId,
+      senderId: user.id,
+      messageText: messageBody,
+    })
 
     return jsonResponse(200, {
       success: true,

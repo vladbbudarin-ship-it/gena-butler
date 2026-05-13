@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { getOwnerCalendarSafeSummary, normalizeCalendarAction } from './google-calendar.js'
 import { notifyOwnerAboutIncomingMessage } from './owner-notifications.js'
 
 const openaiApiKey = process.env.OPENAI_API_KEY
@@ -49,7 +50,7 @@ function isMissingSchemaColumn(error) {
     || /column|schema cache/i.test(error?.message || '')
 }
 
-async function generateAiDraft({ questionText, urgencyLevel }) {
+async function generateAiDraft({ questionText, urgencyLevel, calendarContext }) {
   if (!openaiApiKey) {
     throw new Error('OPENAI_API_KEY не найден в переменных окружения.')
   }
@@ -80,6 +81,7 @@ async function generateAiDraft({ questionText, urgencyLevel }) {
   "ai_importance": "low | medium | high",
   "ai_suggested_status": "answer | clarify | ignore | urgent_review",
   "ai_reply_options": ["2-3 response options in Russian"],
+  "calendar_action": null,
   "ai_reason": "короткое объяснение на русском",
   "draft_ru": "черновик ответа на русском",
   "draft_zh": "перевод draft_ru на китайский"
@@ -89,6 +91,8 @@ async function generateAiDraft({ questionText, urgencyLevel }) {
 - ai_importance может быть только low, medium или high.
 - draft_ru должен быть вежливым ответом от имени дворецкого Гены.
 - draft_zh должен быть китайским переводом draft_ru.
+- calendar_action заполняй только если пользователь явно просит запланировать встречу, звонок или событие для Бударина. Формат: {"title":"...","start_time":"ISO date-time","end_time":"ISO date-time","description":"...","timezone":"Europe/Moscow"}. Иначе верни null.
+- Учитывай календарь только как безопасную сводку, не раскрывай пользователю названия встреч и участников: ${calendarContext || 'Google Calendar недоступен.'}
 - Не отправляй ответ пользователю напрямую.
 - Не добавляй markdown.
         `,
@@ -134,6 +138,8 @@ async function updateQuestionAiDraft({ supabase, questionId, aiData }) {
     ai_error_message: null,
     ai_reply_options: aiData.ai_reply_options,
     ai_suggested_status: aiData.ai_suggested_status,
+    calendar_action: aiData.calendar_action,
+    calendar_action_status: aiData.calendar_action ? 'pending' : null,
   }
 
   const { error } = await supabase
@@ -152,6 +158,8 @@ async function updateQuestionAiDraft({ supabase, questionId, aiData }) {
   const fallbackData = { ...updateData }
   delete fallbackData.ai_reply_options
   delete fallbackData.ai_suggested_status
+  delete fallbackData.calendar_action
+  delete fallbackData.calendar_action_status
 
   const { error: fallbackError } = await supabase
     .from('questions')
@@ -398,9 +406,11 @@ export async function createOwnerQuestionFromUser({
   }
 
   try {
+    const calendarContext = await getOwnerCalendarSafeSummary({ supabase })
     const aiResult = await generateAiDraft({
       questionText: normalizedQuestionText,
       urgencyLevel,
+      calendarContext,
     })
 
     if (!['low', 'medium', 'high'].includes(aiResult.ai_importance)) {
@@ -414,6 +424,7 @@ export async function createOwnerQuestionFromUser({
     const finalImportance = getFinalImportance(priorityScore)
     const aiSuggestedStatus = normalizeAiSuggestedStatus(aiResult.ai_suggested_status)
     const aiReplyOptions = normalizeAiReplyOptions(aiResult.ai_reply_options, aiResult.draft_ru)
+    const calendarAction = normalizeCalendarAction(aiResult.calendar_action)
 
     await updateQuestionAiDraft({
       supabase,
@@ -427,6 +438,7 @@ export async function createOwnerQuestionFromUser({
         final_importance: finalImportance,
         ai_reply_options: aiReplyOptions,
         ai_suggested_status: aiSuggestedStatus,
+        calendar_action: calendarAction,
       },
     })
 

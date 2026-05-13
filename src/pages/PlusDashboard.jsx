@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   createSupAiSuggestion,
+  deleteSupAiSuggestion,
   getMyProfile,
   getSupProjectDetails,
   getSupProjects,
@@ -15,6 +16,20 @@ function isPlusProfile(profile, user) {
 
 function getProjectTitle(project) {
   return project?.title || 'Проект'
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return '—'
+  }
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
 }
 
 export default function PlusDashboard({ user, onBack, onOpenProjects }) {
@@ -34,6 +49,10 @@ export default function PlusDashboard({ user, onBack, onOpenProjects }) {
     [projects, selectedProjectId]
   )
   const taskOptions = projectDetails?.tasks || []
+  const aiHistory = useMemo(
+    () => (projectDetails?.suggestions || []).filter((item) => !item.deleted_at),
+    [projectDetails]
+  )
 
   useEffect(() => {
     async function init() {
@@ -94,6 +113,25 @@ export default function PlusDashboard({ user, onBack, onOpenProjects }) {
       const details = await getSupProjectDetails(selectedProjectId)
       setProjectDetails(details)
       setMessage('AI-предложение сохранено.')
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteSuggestion(suggestionId) {
+    if (!window.confirm('Удалить этот AI-ответ из истории?')) {
+      return
+    }
+
+    try {
+      setBusy(true)
+      setMessage('')
+      await deleteSupAiSuggestion(suggestionId)
+      const details = await getSupProjectDetails(selectedProjectId)
+      setProjectDetails(details)
+      setMessage('AI-ответ удалён из истории.')
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -182,16 +220,37 @@ export default function PlusDashboard({ user, onBack, onOpenProjects }) {
             </button>
           </form>
 
-          <div className="sup-mini-list">
-            {[...(projectDetails?.suggestions || [])].map((item) => (
-              <div className="sup-row" key={item.id}>
+          <div className="sup-mini-list ai-history-list">
+            {aiHistory.length === 0 && (
+              <p className="notice">Истории AI-ответов по этому проекту пока нет.</p>
+            )}
+
+            {aiHistory.map((item) => {
+              const task = taskOptions.find((taskItem) => taskItem.id === item.task_id)
+
+              return (
+              <div className="sup-row ai-history-row" key={item.id}>
                 <div>
-                  <strong>AI-предложение</strong>
-                  <small>{item.prompt}</small>
+                  <strong>AI-ответ</strong>
+                  <small>{formatDateTime(item.created_at)} · {selectedProject ? getProjectTitle(selectedProject) : 'Проект'}</small>
+                  {task && <small>Задача: {task.title}</small>}
+                  <small>Статус: сохранено</small>
+                  <small>Запрос: {item.prompt}</small>
                   <p>{item.suggestion}</p>
                 </div>
+                <div className="sup-row-actions">
+                  <button
+                    className="secondary compact"
+                    type="button"
+                    onClick={() => handleDeleteSuggestion(item.id)}
+                    disabled={busy}
+                  >
+                    Удалить
+                  </button>
+                </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </main>
       </section>

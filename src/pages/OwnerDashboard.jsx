@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   createPlusInviteCode,
+  disconnectGoogleCalendar,
+  getGoogleCalendarAuthUrl,
+  getGoogleCalendarStatus,
   getOwnerQuestions,
   getPlusInviteCodes,
   ownerAction,
@@ -126,6 +129,9 @@ export default function OwnerDashboard({ onBack }) {
   const [plusCodes, setPlusCodes] = useState([])
   const [plusCodeMessage, setPlusCodeMessage] = useState('')
   const [plusCodeLoading, setPlusCodeLoading] = useState(false)
+  const [calendarStatus, setCalendarStatus] = useState(null)
+  const [calendarMessage, setCalendarMessage] = useState('')
+  const [calendarLoading, setCalendarLoading] = useState(false)
 
   const [editingId, setEditingId] = useState(null)
   const [editRu, setEditRu] = useState('')
@@ -179,6 +185,51 @@ export default function OwnerDashboard({ onBack }) {
   async function handleCopyPlusCode(code) {
     await navigator.clipboard.writeText(code)
     setPlusCodeMessage('Код скопирован.')
+  }
+
+  async function loadCalendarStatus({ silent = false } = {}) {
+    try {
+      if (!silent) {
+        setCalendarMessage('')
+      }
+
+      const data = await getGoogleCalendarStatus()
+      setCalendarStatus(data)
+    } catch (error) {
+      if (!silent) {
+        setCalendarMessage(error.message)
+      }
+    }
+  }
+
+  async function handleConnectGoogleCalendar() {
+    try {
+      setCalendarLoading(true)
+      setCalendarMessage('')
+      const authUrl = await getGoogleCalendarAuthUrl()
+      window.location.href = authUrl
+    } catch (error) {
+      setCalendarMessage(error.message)
+      setCalendarLoading(false)
+    }
+  }
+
+  async function handleDisconnectGoogleCalendar() {
+    if (!window.confirm('Отключить Google Calendar?')) {
+      return
+    }
+
+    try {
+      setCalendarLoading(true)
+      setCalendarMessage('')
+      await disconnectGoogleCalendar()
+      await loadCalendarStatus({ silent: true })
+      setCalendarMessage('Google Calendar отключён.')
+    } catch (error) {
+      setCalendarMessage(error.message)
+    } finally {
+      setCalendarLoading(false)
+    }
   }
 
   async function handleOwnerAction({
@@ -244,6 +295,7 @@ export default function OwnerDashboard({ onBack }) {
   useEffect(() => {
     loadQuestions()
     loadPlusCodes({ silent: true })
+    loadCalendarStatus({ silent: true })
   }, [])
 
   const filteredQuestions = useMemo(() => {
@@ -288,6 +340,45 @@ export default function OwnerDashboard({ onBack }) {
 
 
       <OwnerChatPanel />
+
+      <section className="dashboard-card">
+        <div className="sup-header" style={{ marginBottom: '16px' }}>
+          <div>
+            <h3>Google Calendar</h3>
+            <p>Календарь доступен только Бударину. В AI уходит безопасная сводка занятости без названий встреч и участников.</p>
+          </div>
+          <div className="toolbar">
+            {calendarStatus?.connected ? (
+              <button className="secondary" type="button" onClick={handleDisconnectGoogleCalendar} disabled={calendarLoading}>
+                Отключить
+              </button>
+            ) : (
+              <button type="button" onClick={handleConnectGoogleCalendar} disabled={calendarLoading}>
+                {calendarLoading ? 'Подключаем...' : 'Подключить Google Calendar'}
+              </button>
+            )}
+            <button className="secondary" type="button" onClick={() => loadCalendarStatus()}>
+              Обновить статус
+            </button>
+          </div>
+        </div>
+
+        <div className="calendar-status-card">
+          {calendarStatus?.connected ? (
+            <>
+              <span className="status-pill status-approved">Google Calendar подключён</span>
+              {calendarStatus.google_email && <strong>{calendarStatus.google_email}</strong>}
+            </>
+          ) : (
+            <>
+              <span className="status-pill status-draft_ready">Google Calendar не подключён</span>
+              <small>GOOGLE_REDIRECT_URI: https://gena-dvoretskiy.netlify.app/.netlify/functions/google-calendar-callback</small>
+            </>
+          )}
+        </div>
+
+        {calendarMessage && <p className="notice" style={{ marginTop: '14px' }}>{calendarMessage}</p>}
+      </section>
 
       <section className="dashboard-card">
         <div className="sup-header" style={{ marginBottom: '16px' }}>
@@ -440,6 +531,23 @@ export default function OwnerDashboard({ onBack }) {
                 <FieldBlock title="Ошибка AI">
                   {question.ai_error_message}
                 </FieldBlock>
+              )}
+
+              {question.calendar_action && (
+                <div className="calendar-action-box">
+                  <strong>Календарное действие</strong>
+                  <p>{question.calendar_action.title || question.calendar_action.summary || 'Событие'}</p>
+                  <small>
+                    {question.calendar_action.start_time || question.calendar_action.start} — {question.calendar_action.end_time || question.calendar_action.end}
+                  </small>
+                  {question.calendar_action.description && <small>{question.calendar_action.description}</small>}
+                  <small>Timezone: {question.calendar_action.timezone || 'Europe/Moscow'}</small>
+                  {question.calendar_event_link ? (
+                    <a href={question.calendar_event_link} target="_blank" rel="noreferrer">Открыть событие</a>
+                  ) : (
+                    <small>При утверждении будет создано событие в Google Calendar.</small>
+                  )}
+                </div>
               )}
 
               {!isClosed && (
