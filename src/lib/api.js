@@ -1092,9 +1092,29 @@ export async function addSupTaskComment(taskId, body) {
   return { success: true }
 }
 
+function createSafeStorageFileName(fileName) {
+  const originalName = String(fileName || 'file').trim() || 'file'
+  const dotIndex = originalName.lastIndexOf('.')
+  const rawBase = dotIndex > 0 ? originalName.slice(0, dotIndex) : originalName
+  const rawExtension = dotIndex > 0 ? originalName.slice(dotIndex).toLowerCase() : ''
+  const safeBase = rawBase
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+    || 'file'
+  const safeExtension = rawExtension.replace(/[^a-z0-9.]/g, '').slice(0, 16)
+  const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2)
+
+  return `${Date.now()}-${uniqueId}-${safeBase}${safeExtension}`
+}
+
 export async function uploadSupProjectFile(projectId, file) {
   const session = await getRequiredSession()
-  const storagePath = `projects/${projectId}/${Date.now()}-${file.name}`
+  const storagePath = `projects/${projectId}/${createSafeStorageFileName(file.name)}`
 
   const { error: uploadError } = await supabase.storage
     .from('sup-project-files')
@@ -1124,7 +1144,7 @@ export async function uploadSupProjectFile(projectId, file) {
 
 export async function uploadSupTaskFile(taskId, file) {
   const session = await getRequiredSession()
-  const storagePath = `tasks/${taskId}/${Date.now()}-${file.name}`
+  const storagePath = `tasks/${taskId}/${createSafeStorageFileName(file.name)}`
 
   const { error: uploadError } = await supabase.storage
     .from('sup-project-files')

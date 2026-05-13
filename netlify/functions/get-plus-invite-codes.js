@@ -101,9 +101,13 @@ export const handler = async (event) => {
       return jsonResponse(403, { error: 'Список кодов Пользователь+ доступен только Бударину.' })
     }
 
+    const now = new Date().toISOString()
     const { data: codes, error } = await supabase
       .from('plus_invite_codes')
       .select('id, code, created_by, used_by, is_used, expires_at, created_at, used_at')
+      .eq('is_used', false)
+      .is('used_at', null)
+      .gt('expires_at', now)
       .order('created_at', { ascending: false })
       .limit(50)
 

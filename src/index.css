@@ -2455,6 +2455,39 @@ button.icon {
   min-height: 96px;
 }
 
+.task-decision-block {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfbfb;
+  padding: 14px;
+}
+
+.task-decision-block h5 {
+  margin: 0;
+  color: var(--graphite);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.task-decision-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.task-decision-actions button {
+  min-height: 42px;
+}
+
+.task-decision-actions .success {
+  border-color: #166534;
+  background: #166534;
+  color: #ffffff;
+}
+
 .sup-mini-list {
   display: grid;
   gap: 10px;
@@ -2831,6 +2864,7 @@ button.icon {
   }
 
   .sup-section-head,
+  .task-decision-actions,
   .plus-hero {
     display: grid;
   }

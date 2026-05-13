@@ -309,7 +309,7 @@ export default function OwnerDashboard({ onBack }) {
 
         <div className="sup-mini-list">
           {plusCodes.length === 0 && (
-            <p className="notice">Кодов Пользователь+ пока нет.</p>
+            <p className="notice">Активных кодов пока нет.</p>
           )}
 
           {plusCodes.map((code) => (

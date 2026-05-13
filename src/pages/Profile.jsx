@@ -28,6 +28,10 @@ function getAccountRoleLabel(profile, isOwner) {
   return 'Пользователь'
 }
 
+function isInviteActive(invite) {
+  return Boolean(invite?.code && invite?.expiresAt && new Date(invite.expiresAt).getTime() > Date.now())
+}
+
 export default function Profile({
   user,
   onLogout,
@@ -47,6 +51,7 @@ export default function Profile({
   const [telegramMessage, setTelegramMessage] = useState('')
   const [telegramLoading, setTelegramLoading] = useState(false)
   const canOpenPlusDashboard = isOwner || profile?.account_type === 'user_plus' || profile?.role === 'user_plus'
+  const activeInvite = isInviteActive(invite)
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -199,14 +204,14 @@ export default function Profile({
             {inviteLoading ? 'Создаём...' : 'Пригласить'}
           </button>
 
-          {invite?.code && (
+          {activeInvite && (
             <button className="secondary" onClick={handleCopyInviteCode}>
               Скопировать код
             </button>
           )}
         </div>
 
-        {invite?.code && (
+        {activeInvite && (
           <div className="invite-code-box">
             <span>Invite-код</span>
             <strong>{invite.code}</strong>

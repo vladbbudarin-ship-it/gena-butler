@@ -822,11 +822,21 @@ export default function Projects({ user, onBack }) {
                             </div>
                           )}
 
-                          <div className="button-row">
-                            {canCompleteTask && <button type="button" onClick={() => handleTaskStatus('review')} disabled={busy}>Выполнено</button>}
-                            {canReviewTask && <button className="secondary" type="button" onClick={() => handleTaskStatus('done')} disabled={busy}>Принять</button>}
-                            {canReviewTask && <button className="danger-outline" type="button" onClick={() => handleTaskStatus('needs_changes')} disabled={busy}>Вернуть на доработку</button>}
-                          </div>
+                          {canCompleteTask && (
+                            <div className="button-row">
+                              <button type="button" onClick={() => handleTaskStatus('review')} disabled={busy}>Выполнено</button>
+                            </div>
+                          )}
+
+                          {canReviewTask && (
+                            <div className="task-decision-block">
+                              <h5>Решение по задаче</h5>
+                              <div className="task-decision-actions">
+                                <button className="success" type="button" onClick={() => handleTaskStatus('done')} disabled={busy}>Принять задачу</button>
+                                <button className="danger-outline" type="button" onClick={() => handleTaskStatus('needs_changes')} disabled={busy}>Вернуть на доработку</button>
+                              </div>
+                            </div>
+                          )}
 
                           <div className="sup-mini-list">
                             {[...(taskDetails.updates || []).map((item) => ({ ...item, kind: 'Дополнение' })), ...(taskDetails.comments || []).map((item) => ({ ...item, kind: 'Комментарий' }))].map((item) => (
