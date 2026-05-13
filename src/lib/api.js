@@ -840,36 +840,29 @@ export async function updateSupProject(projectId, { title, description, status, 
 }
 
 export async function addSupProjectMember({ projectId, userPublicId, positionTitle, accessLevel }) {
-  await getRequiredSession()
+  const session = await getRequiredSession()
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('public_id', userPublicId)
-    .maybeSingle()
-
-  if (profileError) {
-    throw new Error(`Не удалось найти пользователя. ${profileError.message}`)
-  }
-
-  if (!profile) {
-    throw new Error('Пользователь с таким ID не найден.')
-  }
-
-  const { error } = await supabase
-    .from('sup_project_members')
-    .upsert({
+  const response = await fetch('/.netlify/functions/add-sup-project-member', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
       project_id: projectId,
-      user_id: profile.id,
+      public_id: userPublicId,
       position_title: positionTitle,
       access_level: accessLevel,
-    }, { onConflict: 'project_id,user_id' })
+    }),
+  })
 
-  if (error) {
-    throw new Error(`Не удалось добавить участника. ${error.message}`)
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось добавить участника.'))
   }
 
-  return { success: true }
+  return result
 }
 
 export async function updateSupProjectMember({ projectId, userId, positionTitle, accessLevel }) {

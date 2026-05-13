@@ -22,7 +22,7 @@ async function notifyDirectChatRecipients({ conversationId, senderId, messageTex
       if (participantsError) {
         console.warn('Direct chat notification skipped: participants lookup failed.', participantsError.message)
       }
-      return
+      return { attempted: 0, sent: 0, reason: 'no_participants' }
     }
 
     const recipientIds = participants.map((participant) => participant.user_id).filter(Boolean)
@@ -43,7 +43,7 @@ async function notifyDirectChatRecipients({ conversationId, senderId, messageTex
       if (profilesError) {
         console.warn('Direct chat notification skipped: recipient profiles lookup failed.', profilesError.message)
       }
-      return
+      return { attempted: 0, sent: 0, reason: 'no_profiles' }
     }
 
     const senderName = getDisplayName(senderProfile)
@@ -55,18 +55,37 @@ async function notifyDirectChatRecipients({ conversationId, senderId, messageTex
       truncateText(messageText, 1200),
     ].join('\n')
 
-    await Promise.allSettled(
-      recipientProfiles
-        .filter((profile) => profile.telegram_user_id)
-        .filter((profile) => String(profile.telegram_user_id) !== senderTelegramId)
+    const telegramRecipients = recipientProfiles
+      .filter((profile) => profile.telegram_user_id)
+      .filter((profile) => String(profile.telegram_user_id) !== senderTelegramId)
+
+    if (telegramRecipients.length === 0) {
+      console.warn('Direct chat notification skipped: recipients have no linked Telegram.')
+      return { attempted: 0, sent: 0, reason: 'no_linked_telegram' }
+    }
+
+    const results = await Promise.allSettled(
+      telegramRecipients
         .map((profile) => sendTelegramMessage(profile.telegram_user_id, notificationText, {
           reply_markup: {
             inline_keyboard: [[{ text: 'Открыть сайт', url: TELEGRAM_SITE_URL }]],
           },
         }))
     )
+
+    const sent = results.filter((result) => (
+      result.status === 'fulfilled'
+      && result.value
+      && result.value.ok !== false
+    )).length
+
+    return {
+      attempted: telegramRecipients.length,
+      sent,
+    }
   } catch (error) {
     console.warn('Direct chat notification skipped:', error.message)
+    return { attempted: 0, sent: 0, reason: error.message }
   }
 }
 
@@ -186,7 +205,7 @@ export const handler = async (event) => {
       })
     }
 
-    await notifyDirectChatRecipients({
+    const telegramNotification = await notifyDirectChatRecipients({
       conversationId,
       senderId: user.id,
       messageText: messageBody,
@@ -195,6 +214,7 @@ export const handler = async (event) => {
     return jsonResponse(200, {
       success: true,
       message,
+      telegram_notification: telegramNotification,
     })
   } catch (error) {
     return jsonResponse(500, {
