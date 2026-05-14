@@ -164,6 +164,31 @@ export const handler = async (event) => {
       })
     }
 
+    const roleInProject = accessLevel === 'admin'
+      ? 'owner'
+      : accessLevel === 'manager'
+        ? 'manager'
+        : accessLevel === 'viewer'
+          ? 'observer'
+          : 'member'
+
+    const { error: relationError } = await supabase
+      .from('sup_project_member_relations')
+      .upsert({
+        project_id: projectId,
+        user_id: targetProfile.id,
+        role_in_project: roleInProject,
+        task_visibility: accessLevel === 'admin' ? 'project' : 'own',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'project_id,user_id' })
+
+    if (relationError && !/schema cache|relation|does not exist/i.test(relationError.message || '')) {
+      return jsonResponse(500, {
+        error: 'Участник добавлен, но структура доступа не обновлена.',
+        details: relationError.message,
+      })
+    }
+
     return jsonResponse(200, {
       success: true,
       member: {

@@ -267,6 +267,53 @@ export async function getGoogleCalendarStatus() {
   return result
 }
 
+export async function getAttachmentUrl({ kind, fileId }) {
+  const session = await getRequiredSession()
+  const params = new URLSearchParams({
+    kind,
+    file_id: fileId,
+  })
+
+  const response = await fetch(`/.netlify/functions/get-attachment-url?${params}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось открыть файл.'))
+  }
+
+  return result.url
+}
+
+export async function deleteAttachment({ kind, fileId }) {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/delete-attachment', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      kind,
+      file_id: fileId,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось удалить файл.'))
+  }
+
+  return result
+}
+
 export async function getGoogleCalendarAuthUrl() {
   const session = await getRequiredSession()
 
@@ -818,6 +865,102 @@ export async function deleteSupAiSuggestion(suggestionId) {
   return result
 }
 
+export async function getProjectAccessTree(projectId) {
+  const session = await getRequiredSession()
+  const params = new URLSearchParams({ project_id: projectId })
+
+  const response = await fetch(`/.netlify/functions/get-project-access-tree?${params}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось загрузить структуру проекта.'))
+  }
+
+  return result
+}
+
+export async function updateProjectMemberManager({ projectId, userId, managerUserId }) {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/update-project-member-manager', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      project_id: projectId,
+      user_id: userId,
+      manager_user_id: managerUserId || null,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось обновить руководителя.'))
+  }
+
+  return result
+}
+
+export async function updateProjectMemberAccess({ projectId, userId, roleInProject, taskVisibility }) {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/update-project-member-access', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      project_id: projectId,
+      user_id: userId,
+      role_in_project: roleInProject,
+      task_visibility: taskVisibility,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось обновить доступ участника.'))
+  }
+
+  return result
+}
+
+export async function importProjectAccessTree({ sourceProjectId, targetProjectId, options }) {
+  const session = await getRequiredSession()
+
+  const response = await fetch('/.netlify/functions/import-project-access-tree', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      source_project_id: sourceProjectId,
+      target_project_id: targetProjectId,
+      options,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(getApiError(result, 'Не удалось импортировать структуру проекта.'))
+  }
+
+  return result
+}
+
 export async function createSupProject({ title, description, status, aiContext }) {
   const session = await getRequiredSession()
 
@@ -990,7 +1133,7 @@ export async function getSupProjectDetails(projectId) {
       assignee: profilesById[task.assignee_id] || null,
       creator: profilesById[task.created_by] || null,
     })),
-    files: filesResult.data || [],
+    files: (filesResult.data || []).filter((file) => !file.deleted_at),
     suggestions: suggestionsResult.data || [],
   }
 }
@@ -1001,7 +1144,7 @@ export async function createSupTask({
   description,
   status = 'todo',
   priority = 'normal',
-  visibility = 'project_public',
+  visibility = 'own',
   assigneeId,
   dueDate,
   customUserIds = [],
@@ -1151,7 +1294,7 @@ export async function getSupTaskDetails(taskId) {
       ...row,
       profile: profilesById[row.user_id] || null,
     })),
-    files: filesResult.data || [],
+    files: (filesResult.data || []).filter((file) => !file.deleted_at),
     suggestions: suggestionsResult.data || [],
     visibleUserIds: (visibleResult.data || []).map((row) => row.user_id),
   }
@@ -1230,6 +1373,38 @@ export async function uploadSupProjectFile(projectId, file) {
     .insert({
       project_id: projectId,
       uploaded_by: session.user.id,
+      storage_path: storagePath,
+      file_name: file.name,
+      mime_type: file.type || null,
+      file_size: file.size,
+    })
+
+  if (insertError) {
+    throw new Error(`Файл загружен, но запись не сохранена. ${insertError.message}`)
+  }
+
+  return { success: true }
+}
+
+export async function uploadChatMessageFile({ messageId, conversationId, file }) {
+  const session = await getRequiredSession()
+  const storagePath = `chat/${conversationId}/${messageId}/${createSafeStorageFileName(file.name)}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('attachments')
+    .upload(storagePath, file, { upsert: false })
+
+  if (uploadError) {
+    throw new Error(`Не удалось загрузить файл. ${uploadError.message}`)
+  }
+
+  const { error: insertError } = await supabase
+    .from('chat_message_files')
+    .insert({
+      message_id: messageId,
+      conversation_id: conversationId,
+      uploaded_by: session.user.id,
+      storage_bucket: 'attachments',
       storage_path: storagePath,
       file_name: file.name,
       mime_type: file.type || null,

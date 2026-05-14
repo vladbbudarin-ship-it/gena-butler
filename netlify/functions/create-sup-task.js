@@ -97,9 +97,9 @@ function normalizePriority(value) {
 }
 
 function normalizeVisibility(value) {
-  return ['project_public', 'assigned_only', 'custom'].includes(value)
+  return ['own', 'own_and_subordinates', 'subtree', 'project', 'custom', 'project_public', 'assigned_only'].includes(value)
     ? value
-    : 'project_public'
+    : 'own'
 }
 
 export const handler = async (event) => {
@@ -201,6 +201,26 @@ export const handler = async (event) => {
         return jsonResponse(500, {
           error: 'Задача создана, но доступы не сохранены.',
           details: visibilityError.message,
+          task,
+        })
+      }
+
+      const accessRows = [...new Set(customUserIds)].map((userId) => ({
+        project_id: projectId,
+        task_id: task.id,
+        user_id: userId,
+        access_level: 'view',
+        granted_by: user.id,
+      }))
+
+      const { error: taskAccessError } = await supabase
+        .from('sup_task_access')
+        .upsert(accessRows, { onConflict: 'task_id,user_id' })
+
+      if (taskAccessError && !/schema cache|relation|does not exist/i.test(taskAccessError.message || '')) {
+        return jsonResponse(500, {
+          error: 'Задача создана, но ручные доступы не сохранены.',
+          details: taskAccessError.message,
           task,
         })
       }

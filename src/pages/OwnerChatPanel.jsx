@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { deleteChat, deleteMessage, getOwnerChat, getOwnerChats, sendChatMessage } from '../lib/api'
+import {
+  deleteChat,
+  deleteMessage,
+  getOwnerChat,
+  getOwnerChats,
+  sendChatMessage,
+  uploadChatMessageFile,
+} from '../lib/api'
+import AttachmentList from '../components/AttachmentList'
 
 const roleLabels = {
   user: 'Пользователь',
@@ -99,9 +107,11 @@ export default function OwnerChatPanel() {
   const [conversations, setConversations] = useState([])
   const [selectedConversationId, setSelectedConversationId] = useState(null)
   const [selectedConversation, setSelectedConversation] = useState(null)
+  const [profileIdPopoverOpen, setProfileIdPopoverOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [replyText, setReplyText] = useState('')
   const [message, setMessage] = useState('')
+  const [selectedFiles, setSelectedFiles] = useState([])
   const [loadingList, setLoadingList] = useState(true)
   const [loadingChat, setLoadingChat] = useState(false)
   const [sending, setSending] = useState(false)
@@ -177,8 +187,23 @@ export default function OwnerChatPanel() {
   }, [])
 
   async function refreshCurrentChat() {
+    setProfileIdPopoverOpen(false)
     await loadSelectedConversation(selectedConversationIdRef.current, { silent: true })
     await loadConversations({ silent: true })
+  }
+
+  async function uploadSelectedFiles({ messageId, conversationId }) {
+    if (!selectedFiles.length || !messageId || !conversationId) {
+      return
+    }
+
+    for (const file of selectedFiles) {
+      await uploadChatMessageFile({
+        messageId,
+        conversationId,
+        file,
+      })
+    }
   }
 
   async function handleSend(event) {
@@ -198,14 +223,20 @@ export default function OwnerChatPanel() {
     try {
       setSending(true)
 
-      await sendChatMessage({
+      const result = await sendChatMessage({
         conversationId: selectedConversationId,
         senderRole: 'owner',
         body: replyText,
         importance: 'normal',
       })
 
+      await uploadSelectedFiles({
+        messageId: result.message?.id,
+        conversationId: result.message?.conversation_id || selectedConversationId,
+      })
+
       setReplyText('')
+      setSelectedFiles([])
       resizeComposerTextarea(replyTextareaRef.current)
       await refreshCurrentChat()
     } catch (error) {
@@ -235,6 +266,7 @@ export default function OwnerChatPanel() {
     }
 
     try {
+      setProfileIdPopoverOpen(false)
       setMessage('')
       await deleteChat(selectedConversationId)
       const nextConversations = conversations.filter((conversation) => conversation.id !== selectedConversationId)
@@ -249,9 +281,26 @@ export default function OwnerChatPanel() {
     }
   }
 
+  async function handleCopyUserId() {
+    const profile = selectedConversation?.user_profile
+    const userId = profile?.public_id || profile?.id
+
+    if (!userId) {
+      return
+    }
+
+    await navigator.clipboard.writeText(userId)
+    setMessage('ID пользователя скопирован.')
+    setProfileIdPopoverOpen(false)
+  }
+
   function handleReplyTextChange(event) {
     setReplyText(event.target.value)
     resizeComposerTextarea(event.target)
+  }
+
+  function handleFileChange(event) {
+    setSelectedFiles(Array.from(event.target.files || []))
   }
 
   function handleComposerKeyDown(event) {
@@ -273,6 +322,7 @@ export default function OwnerChatPanel() {
 
   useEffect(() => {
     loadSelectedConversation(selectedConversationId)
+    setProfileIdPopoverOpen(false)
   }, [loadSelectedConversation, selectedConversationId])
 
   useEffect(() => {
@@ -345,12 +395,33 @@ export default function OwnerChatPanel() {
 
         <div className="chat-main">
           <div className="chat-topbar">
-            <div>
-              <h3>
+            <div className="owner-chat-user-title">
+              <h3
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  setProfileIdPopoverOpen((current) => !current)
+                }}
+                title="Нажмите правой кнопкой, чтобы показать ID пользователя"
+              >
                 {getProfileTitle(selectedConversation?.user_profile)}
               </h3>
               {selectedConversation?.user_profile?.email && (
                 <p>{selectedConversation.user_profile.email}</p>
+              )}
+
+              {profileIdPopoverOpen && selectedConversation?.user_profile && (
+                <div className="owner-user-id-popover" role="dialog" aria-label="ID пользователя">
+                  <strong>ID пользователя</strong>
+                  {selectedConversation.user_profile.public_id && (
+                    <span>Публичный ID: {selectedConversation.user_profile.public_id}</span>
+                  )}
+                  {selectedConversation.user_profile.id && (
+                    <span>UUID: {selectedConversation.user_profile.id}</span>
+                  )}
+                  <button className="secondary" type="button" onClick={handleCopyUserId}>
+                    Скопировать ID
+                  </button>
+                </div>
               )}
             </div>
 
@@ -401,6 +472,15 @@ export default function OwnerChatPanel() {
                         </div>
                       )}
 
+                      {!chatMessage.deleted_at && (
+                        <AttachmentList
+                          files={chatMessage.attachments || []}
+                          kind="chat_message"
+                          canDelete={() => true}
+                          onChanged={refreshCurrentChat}
+                        />
+                      )}
+
                       {!chatMessage.deleted_at && chatMessage.sender_role === 'owner' && !chatMessage.source_question_id && (
                         <button
                           className="message-delete-button"
@@ -434,6 +514,19 @@ export default function OwnerChatPanel() {
                   <button className="icon" type="submit" disabled={sending} aria-label="Отправить">
                     →
                   </button>
+                </div>
+                <div className="file-control-row">
+                  <label className="file-control">
+                    Файл
+                    <input type="file" multiple onChange={handleFileChange} disabled={sending} />
+                  </label>
+                  {selectedFiles.length > 0 && (
+                    <div className="selected-files">
+                      {selectedFiles.map((file) => (
+                        <span key={`${file.name}:${file.size}`}>{file.name}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </form>
             </>

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { attachChatMessageFiles } from './_utils/attachments.js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -91,12 +92,23 @@ export const handler = async (event) => {
       profiles.map((profile) => [profile.id, profile])
     )
 
+    const sourceMessagesWithFiles = await attachChatMessageFiles({
+      supabase,
+      messages: questions
+        .filter((question) => question.source_message_id)
+        .map((question) => ({ id: question.source_message_id })),
+    })
+    const attachmentsByMessageId = Object.fromEntries(
+      sourceMessagesWithFiles.map((message) => [message.id, message.attachments || []])
+    )
+
     const enrichedQuestions = questions.map((question) => {
       const profile = profilesById[question.user_id] || null
 
       return {
         ...question,
         user_profile: profile,
+        attachments: question.source_message_id ? attachmentsByMessageId[question.source_message_id] || [] : [],
         is_closed: closedStatuses.includes(question.status),
       }
     })

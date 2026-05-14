@@ -9,6 +9,7 @@ import {
   ownerAction,
 } from '../lib/api'
 import OwnerChatPanel from './OwnerChatPanel'
+import AttachmentList from '../components/AttachmentList'
 
 const closedStatuses = ['approved', 'edited', 'manual_reply', 'rejected']
 
@@ -532,6 +533,13 @@ export default function OwnerDashboard({ onBack }) {
                   {question.ai_error_message}
                 </FieldBlock>
               )}
+
+              <AttachmentList
+                files={question.attachments || []}
+                kind="chat_message"
+                canDelete={() => true}
+                onChanged={loadQuestions}
+              />
 
               {question.calendar_action && (
                 <div className="calendar-action-box">

@@ -137,6 +137,26 @@ export const handler = async (event) => {
       })
     }
 
+    const { error: relationError } = await supabase
+      .from('sup_project_member_relations')
+      .upsert({
+        project_id: project.id,
+        user_id: user.id,
+        manager_user_id: null,
+        role_in_project: 'owner',
+        task_visibility: 'project',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'project_id,user_id' })
+
+    if (relationError && !/schema cache|relation|does not exist/i.test(relationError.message || '')) {
+      await supabase.from('sup_projects').delete().eq('id', project.id)
+
+      return jsonResponse(500, {
+        error: 'Проект создан, но не удалось создать дерево доступа.',
+        details: relationError.message,
+      })
+    }
+
     return jsonResponse(200, {
       success: true,
       project,

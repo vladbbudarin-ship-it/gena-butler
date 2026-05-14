@@ -63,6 +63,8 @@ export const handler = async (event) => {
     return jsonResponse(200, {
       success: true,
       question_id: result.question_id,
+      message_id: result.message?.id,
+      conversation_id: result.conversation?.id,
       status: result.status,
       final_importance: result.final_importance,
       warning: result.warning,

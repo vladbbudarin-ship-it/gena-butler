@@ -18,6 +18,8 @@ import {
   updateSupTask,
   uploadSupTaskFile,
 } from '../lib/api'
+import AttachmentList from '../components/AttachmentList'
+import ProjectAccessTree from './ProjectAccessTree'
 
 const projectStatusLabels = {
   active: 'Активен',
@@ -43,9 +45,13 @@ const priorityLabels = {
 }
 
 const visibilityLabels = {
+  own: 'Только свои задачи',
+  own_and_subordinates: 'Свои + подчинённые',
+  subtree: 'Вся ветка',
+  project: 'Весь проект',
+  custom: 'Выбранным людям',
   project_public: 'Всем участникам',
   assigned_only: 'Исполнителю и управлению',
-  custom: 'Выбранным людям',
 }
 
 const accessLabels = {
@@ -66,6 +72,7 @@ const projectTabs = [
   { id: 'overview', label: 'Обзор' },
   { id: 'tasks', label: 'Задачи' },
   { id: 'members', label: 'Участники' },
+  { id: 'access', label: 'Структура', managerOnly: true },
   { id: 'files', label: 'Файлы' },
   { id: 'ai', label: 'AI-контекст' },
 ]
@@ -158,7 +165,7 @@ export default function Projects({ user, onBack }) {
     description: '',
     status: 'todo',
     priority: 'normal',
-    visibility: 'project_public',
+    visibility: 'own',
     assigneeId: '',
     dueDate: '',
   })
@@ -181,6 +188,12 @@ export default function Projects({ user, onBack }) {
     id: member.user_id,
     label: getProfileName(member.profile),
   })), [projectMembers])
+
+  useEffect(() => {
+    if (activeTab === 'access' && !canManageProject) {
+      setActiveTab('overview')
+    }
+  }, [activeTab, canManageProject])
 
   async function loadProjects(nextSelectedId = selectedProjectId) {
     const data = await getSupProjects()
@@ -227,7 +240,7 @@ export default function Projects({ user, onBack }) {
       description: details.task.description || '',
       status: details.task.status || 'todo',
       priority: details.task.priority || 'normal',
-      visibility: details.task.visibility || 'project_public',
+      visibility: details.task.visibility || 'own',
       assigneeId: details.task.assignee_id || '',
       dueDate: details.task.due_date || '',
     })
@@ -297,7 +310,7 @@ export default function Projects({ user, onBack }) {
       description: '',
       status: 'todo',
       priority: 'normal',
-      visibility: 'project_public',
+      visibility: 'own',
       assigneeId: '',
       dueDate: '',
     })
@@ -638,7 +651,7 @@ export default function Projects({ user, onBack }) {
                 </div>
 
                 <nav className="sup-tabs" aria-label="Разделы проекта">
-                  {projectTabs.map((tab) => (
+                  {projectTabs.filter((tab) => !tab.managerOnly || canManageProject).map((tab) => (
                     <button
                       key={tab.id}
                       className={activeTab === tab.id ? 'active' : 'secondary'}
@@ -931,6 +944,17 @@ export default function Projects({ user, onBack }) {
                   </section>
                 )}
 
+                {activeTab === 'access' && canManageProject && (
+                  <section className="dashboard-card">
+                    <ProjectAccessTree
+                      projectId={selectedProjectId}
+                      projects={projects}
+                      onMessage={setMessage}
+                      onChanged={() => loadProjectDetails(selectedProjectId)}
+                    />
+                  </section>
+                )}
+
                 {activeTab === 'files' && (
                   <section className="dashboard-card">
                     <h4>Файлы</h4>
@@ -943,14 +967,20 @@ export default function Projects({ user, onBack }) {
                       )}
                     </div>
                     <div className="sup-mini-list">
-                      {[...(projectDetails.files || []), ...(taskDetails?.files || [])].map((file) => (
-                        <div className="sup-row" key={file.id}>
-                          <div>
-                            <strong>{file.file_name}</strong>
-                            <small>{file.mime_type || 'Файл'}</small>
-                          </div>
-                        </div>
-                      ))}
+                      <AttachmentList
+                        files={[
+                          ...(projectDetails.files || []).map((file) => ({ ...file, kind: 'sup_project' })),
+                          ...(taskDetails?.files || []).map((file) => ({ ...file, kind: 'sup_task' })),
+                        ]}
+                        kind="sup_task"
+                        canDelete={(file) => file.kind === 'sup_project' ? canManageProject : canManageTasks}
+                        onChanged={async () => {
+                          await loadProjectDetails(selectedProjectId)
+                          if (selectedTaskId) {
+                            await loadTaskDetails(selectedTaskId)
+                          }
+                        }}
+                      />
                     </div>
                   </section>
                 )}

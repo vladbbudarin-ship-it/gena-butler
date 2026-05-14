@@ -1,5 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
+import {
+  assertProjectMember,
+  canViewTask as projectAccessCanViewTask,
+  getAccessibleTasks,
+} from './_utils/project-access.js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -185,14 +190,26 @@ async function buildContext({ projectId, taskId, user, profile }) {
     return { error: 'Проект не найден.' }
   }
 
-  if (!(await canViewProject(project.id, user.id, profile))) {
+  const projectAccess = await assertProjectMember({ supabase, projectId: project.id, user })
+
+  if (projectAccess.error) {
     return { error: 'Нет доступа к проекту.', statusCode: 403 }
   }
 
   let task = null
+  let accessibleTasks = []
   let updates = []
   let comments = []
   let previousSuggestions = []
+
+  // Гена СУП работает только с контекстом текущего project_id после backend-фильтрации доступа.
+  accessibleTasks = await getAccessibleTasks({
+    supabase,
+    projectId: project.id,
+    userId: user.id,
+    profile,
+    user,
+  })
 
   if (taskId) {
     const { data: taskData, error: taskError } = await supabase
@@ -206,7 +223,14 @@ async function buildContext({ projectId, taskId, user, profile }) {
       return { error: 'Задача не найдена.' }
     }
 
-    if (!(await canViewTask(taskData, user.id, profile))) {
+    if (!(await projectAccessCanViewTask({
+      supabase,
+      projectId: project.id,
+      task: taskData,
+      userId: user.id,
+      profile,
+      user,
+    }))) {
       return { error: 'Нет доступа к задаче.', statusCode: 403 }
     }
 
@@ -238,6 +262,7 @@ async function buildContext({ projectId, taskId, user, profile }) {
   return {
     project,
     task,
+    accessibleTasks,
     updates,
     comments,
     previousSuggestions,
@@ -275,6 +300,14 @@ async function generateSuggestion({ prompt, context }) {
             priority: context.task.priority,
             due_date: context.task.due_date,
           } : null,
+          accessible_tasks: (context.accessibleTasks || []).slice(0, 50).map((taskItem) => ({
+            title: taskItem.title,
+            description: taskItem.description,
+            status: taskItem.status,
+            priority: taskItem.priority,
+            visibility: taskItem.visibility,
+            due_date: taskItem.due_date,
+          })),
           task_updates: context.updates,
           comments: context.comments,
           previous_ai_suggestions: context.previousSuggestions,

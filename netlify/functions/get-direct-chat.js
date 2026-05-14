@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { attachChatMessageFiles } from './_utils/attachments.js'
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -178,6 +179,11 @@ export const handler = async (event) => {
       .eq('conversation_id', conversationId)
       .eq('user_id', user.id)
 
+    const messagesWithFiles = await attachChatMessageFiles({
+      supabase,
+      messages: messages || [],
+    })
+
     return jsonResponse(200, {
       success: true,
       conversation: {
@@ -186,7 +192,7 @@ export const handler = async (event) => {
         title: otherUser?.name || otherUser?.public_id || 'Пользователь',
         other_user: otherUser,
       },
-      messages,
+      messages: messagesWithFiles,
     })
   } catch (error) {
     return jsonResponse(500, {

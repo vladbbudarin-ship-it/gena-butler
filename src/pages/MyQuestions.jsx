@@ -9,7 +9,9 @@ import {
   sendDirectMessage,
   startDirectChat,
   submitQuestion,
+  uploadChatMessageFile,
 } from '../lib/api'
+import AttachmentList from '../components/AttachmentList'
 
 const urgencyLabels = {
   normal: 'Обычный',
@@ -108,6 +110,7 @@ export default function MyQuestions({ onBack }) {
   const [selectedChat, setSelectedChat] = useState({ type: 'owner', id: 'owner' })
   const [messages, setMessages] = useState([])
   const [messageText, setMessageText] = useState('')
+  const [selectedFiles, setSelectedFiles] = useState([])
   const [urgency, setUrgency] = useState('normal')
   const [publicIdInput, setPublicIdInput] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
@@ -296,6 +299,20 @@ export default function MyQuestions({ onBack }) {
     }
   }
 
+  async function uploadSelectedFiles({ messageId, conversationId }) {
+    if (!selectedFiles.length || !messageId || !conversationId) {
+      return
+    }
+
+    for (const file of selectedFiles) {
+      await uploadChatMessageFile({
+        messageId,
+        conversationId,
+        file,
+      })
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     setStatusMessage('')
@@ -309,24 +326,36 @@ export default function MyQuestions({ onBack }) {
       setSending(true)
 
       if (selectedChat.type === 'owner') {
-        await submitQuestion({
+        const result = await submitQuestion({
           questionText: messageText,
           urgencyLevel: urgency,
         })
 
+        await uploadSelectedFiles({
+          messageId: result.message_id,
+          conversationId: result.conversation_id || ownerConversation?.id,
+        })
+
         setMessageText('')
+        setSelectedFiles([])
         resizeComposerTextarea(messageTextareaRef.current)
         setUrgency('normal')
         await refreshAll({ type: 'owner', id: 'owner' })
         return
       }
 
-      await sendDirectMessage({
+      const result = await sendDirectMessage({
         conversationId: selectedChat.id,
         body: messageText,
       })
 
+      await uploadSelectedFiles({
+        messageId: result.message?.id,
+        conversationId: result.message?.conversation_id || selectedChat.id,
+      })
+
       setMessageText('')
+      setSelectedFiles([])
       resizeComposerTextarea(messageTextareaRef.current)
       await loadSelectedChat(selectedChatRef.current, { silent: true })
       await loadChatList({ silent: true })
@@ -353,6 +382,10 @@ export default function MyQuestions({ onBack }) {
       event.preventDefault()
       event.currentTarget.form?.requestSubmit()
     }
+  }
+
+  function handleFileChange(event) {
+    setSelectedFiles(Array.from(event.target.files || []))
   }
 
   useEffect(() => {
@@ -490,6 +523,18 @@ export default function MyQuestions({ onBack }) {
                       </div>
                     )}
 
+                    {!message.deleted_at && (
+                      <AttachmentList
+                        files={message.attachments || []}
+                        kind="chat_message"
+                        canDelete={(file) => file.uploaded_by === profile?.id}
+                        onChanged={async () => {
+                          await loadSelectedChat(selectedChatRef.current, { silent: true })
+                          await loadChatList({ silent: true })
+                        }}
+                      />
+                    )}
+
                     {!message.deleted_at && message.sender_id === profile?.id && (
                       <button
                         className="message-delete-button"
@@ -534,6 +579,20 @@ export default function MyQuestions({ onBack }) {
                 <button className="icon" type="submit" disabled={sending} aria-label="Отправить">
                   →
                 </button>
+              </div>
+
+              <div className="file-control-row">
+                <label className="file-control">
+                  Файл
+                  <input type="file" multiple onChange={handleFileChange} disabled={sending} />
+                </label>
+                {selectedFiles.length > 0 && (
+                  <div className="selected-files">
+                    {selectedFiles.map((file) => (
+                      <span key={`${file.name}:${file.size}`}>{file.name}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </form>
           </div>
