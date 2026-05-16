@@ -3360,7 +3360,7 @@ button.icon {
 
 .access-subordination-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
   gap: 16px;
   min-width: 0;
 }
@@ -4407,8 +4407,25 @@ button.icon {
 
 /* SUP visual polish */
 .sup-page {
-  width: min(1180px, calc(100vw - 28px));
+  width: 100%;
+  max-width: min(1800px, calc(100vw - 48px));
+  margin-inline: auto;
   gap: 14px;
+}
+
+.app-frame.workspace-frame,
+.workspace-frame,
+.content-panel,
+.content-panel > .page-stack {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
+.app-nav {
+  width: 100%;
+  max-width: min(1800px, calc(100vw - 48px));
+  margin-inline: auto;
 }
 
 .sup-hero {
@@ -4433,11 +4450,15 @@ button.icon {
 }
 
 .sup-card {
+  width: 100%;
+  max-width: none;
   border-radius: 22px;
 }
 
 .sup-shell {
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  width: 100%;
+  max-width: none;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
   min-height: min(720px, calc(100svh - 132px));
 }
 
@@ -4511,6 +4532,8 @@ button.icon {
 }
 
 .sup-main {
+  width: 100%;
+  max-width: none;
   gap: 14px;
   padding: 16px;
 }
@@ -4667,7 +4690,8 @@ button.icon {
 
 @media (max-width: 920px) {
   .sup-page {
-    width: min(100%, calc(100vw - 20px));
+    width: 100%;
+    max-width: 100%;
   }
 
   .sup-shell,
