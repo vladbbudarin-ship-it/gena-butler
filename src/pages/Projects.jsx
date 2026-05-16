@@ -541,7 +541,6 @@ export default function Projects({ user, onBack }) {
       <section className="sup-hero">
         <img className="wordmark small light" src="/brand/gena-logo-white.png" alt="Гена" />
         <div className="sup-hero-actions">
-          <button className="secondary" type="button" onClick={onBack}>Профиль</button>
           <button className="secondary" type="button" onClick={refresh}>Обновить</button>
           {canCreate && (
             <button type="button" onClick={() => setShowCreateProject(true)}>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   getProjectAccessTree,
-  removeSupProjectMember,
+  updateProjectMemberAccess,
+  updateProjectMemberManager,
   updateSupProjectMember,
 } from '../lib/api'
 
@@ -12,28 +13,27 @@ const accessLabels = {
   viewer: 'Наблюдатель',
 }
 
-const groupLabels = {
-  admin: 'Администраторы',
-  manager: 'Менеджеры',
-  member: 'Участники',
-  viewer: 'Наблюдатели',
+const roleLabels = {
+  owner: 'Владелец',
+  manager: 'Руководитель',
+  member: 'Участник',
+  observer: 'Наблюдатель',
 }
 
-const rightsLabels = {
-  admin: 'Полный доступ',
-  manager: 'Управление задачами',
-  member: 'Свои и общие задачи',
-  viewer: 'Только просмотр',
+const taskVisibilityLabels = {
+  own: 'Только свои задачи',
+  own_and_subordinates: 'Свои + подчинённые',
+  subtree: 'Вся ветка подчинения',
+  project: 'Все задачи проекта',
+  custom: 'Индивидуально',
 }
 
-const roleHelp = {
-  admin: 'Полный управляющий проекта. Может редактировать проект, менять AI-контекст, добавлять и удалять участников, менять их должности и доступ, создавать и редактировать задачи, принимать задачи или возвращать на доработку.',
-  manager: 'Работает с задачами. Может создавать и редактировать задачи, назначать исполнителей, менять статусы задач, принимать задачи или возвращать их на доработку. Но управление участниками и настройками проекта обычно остаётся у администратора.',
-  member: 'Обычный исполнитель внутри проекта. Видит доступные ему задачи, может работать со своими задачами, писать комментарии, добавлять дополнения и нажимать «Выполнено» по задаче, где он назначен исполнителем. Не управляет проектом и участниками.',
-  viewer: 'Режим просмотра. Может видеть проект и доступные задачи, но не должен создавать, редактировать или менять статусы. Это роль “посмотреть, быть в курсе”.',
+const accessToRole = {
+  admin: 'owner',
+  manager: 'manager',
+  member: 'member',
+  viewer: 'observer',
 }
-
-const roleOrder = ['admin', 'manager', 'member', 'viewer']
 
 function getInitials(member) {
   const value = member.name || member.public_id || member.email || 'Пользователь'
@@ -54,6 +54,10 @@ function normalize(value) {
   return String(value || '').toLowerCase().trim()
 }
 
+function getMemberName(member) {
+  return member?.name || member?.public_id || 'Пользователь'
+}
+
 function memberMatchesSearch(member, query) {
   const search = normalize(query)
 
@@ -67,12 +71,131 @@ function memberMatchesSearch(member, query) {
     member.public_id,
     member.position_title,
     member.access_level,
+    member.role_in_project,
     accessLabels[member.access_level],
+    roleLabels[member.role_in_project],
   ].some((value) => normalize(value).includes(search))
 }
 
-function getAdminCount(members) {
-  return members.filter((member) => member.access_level === 'admin').length
+function buildTree(members) {
+  const byId = new Map()
+
+  for (const member of members) {
+    byId.set(member.user_id, {
+      ...member,
+      children: [],
+    })
+  }
+
+  const roots = []
+
+  for (const node of byId.values()) {
+    if (node.manager_user_id && byId.has(node.manager_user_id) && node.manager_user_id !== node.user_id) {
+      byId.get(node.manager_user_id).children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+
+  const sortNodes = (nodes) => {
+    nodes.sort((a, b) => getMemberName(a).localeCompare(getMemberName(b), 'ru'))
+    nodes.forEach((node) => sortNodes(node.children))
+  }
+
+  sortNodes(roots)
+
+  return roots
+}
+
+function filterTree(nodes, query, roleFilter) {
+  return nodes
+    .map((node) => {
+      const children = filterTree(node.children || [], query, roleFilter)
+      const matchesRole = roleFilter === 'all' || node.access_level === roleFilter || node.role_in_project === roleFilter
+      const matchesSearch = memberMatchesSearch(node, query)
+
+      if ((matchesRole && matchesSearch) || children.length > 0) {
+        return {
+          ...node,
+          children,
+        }
+      }
+
+      return null
+    })
+    .filter(Boolean)
+}
+
+function collectUserIds(nodes, result = []) {
+  for (const node of nodes) {
+    result.push(node.user_id)
+    collectUserIds(node.children || [], result)
+  }
+
+  return result
+}
+
+function getDirectReports(members, userId) {
+  return members
+    .filter((member) => member.manager_user_id === userId)
+    .sort((a, b) => getMemberName(a).localeCompare(getMemberName(b), 'ru'))
+}
+
+function getManagerName(membersById, managerUserId) {
+  if (!managerUserId) {
+    return 'Без руководителя'
+  }
+
+  return getMemberName(membersById.get(managerUserId))
+}
+
+function TreeNode({ node, depth, selectedUserId, expandedIds, onToggle, onSelect }) {
+  const isExpanded = expandedIds.has(node.user_id)
+  const hasChildren = (node.children || []).length > 0
+
+  return (
+    <div className="access-hierarchy-node">
+      <button
+        className={`access-tree-node${selectedUserId === node.user_id ? ' active' : ''}`}
+        style={{ '--depth': depth }}
+        type="button"
+        onClick={() => onSelect(node.user_id)}
+      >
+        <span className="access-tree-indent" aria-hidden="true" />
+        <span className="access-avatar">{getInitials(node)}</span>
+        <span className="access-tree-copy">
+          <strong>{getMemberName(node)}</strong>
+          <small>{node.position_title || 'Без должности'}</small>
+        </span>
+        <span className={`access-role-badge access-role-${node.access_level}`}>
+          <span>{roleLabels[node.role_in_project] || accessLabels[node.access_level] || 'Участник'}</span>
+        </span>
+        <span className="access-task-count">{node.accessible_task_count || 0} задач</span>
+      </button>
+
+      {hasChildren && (
+        <button className="access-tree-toggle" type="button" onClick={() => onToggle(node.user_id)}>
+          {isExpanded ? 'Свернуть ветку' : `Показать подчинённых (${node.children.length})`}
+        </button>
+      )}
+
+      {hasChildren && isExpanded && (
+        <div className="access-tree-children">
+          {node.children.map((child) => (
+            <TreeNode
+              key={child.user_id}
+              node={child}
+              depth={depth + 1}
+              selectedUserId={selectedUserId}
+              expandedIds={expandedIds}
+              onToggle={onToggle}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function ProjectAccessTree({
@@ -84,21 +207,18 @@ export default function ProjectAccessTree({
 }) {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(false)
-  const [busyUserId, setBusyUserId] = useState(null)
+  const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
-  const [activeHelp, setActiveHelp] = useState(null)
-  const [editingUserId, setEditingUserId] = useState(null)
+  const [selectedUserId, setSelectedUserId] = useState(null)
+  const [expandedIds, setExpandedIds] = useState(new Set())
   const [editForm, setEditForm] = useState({
+    managerUserId: '',
     positionTitle: '',
     accessLevel: 'member',
-  })
-  const [expandedGroups, setExpandedGroups] = useState({
-    admin: true,
-    manager: true,
-    member: true,
-    viewer: false,
+    roleInProject: 'member',
+    taskVisibility: 'own',
   })
 
   async function loadTree() {
@@ -110,7 +230,15 @@ export default function ProjectAccessTree({
     try {
       setLoading(true)
       const result = await getProjectAccessTree(projectId)
-      setMembers(result.members || [])
+      const nextMembers = result.members || []
+      const roots = buildTree(nextMembers)
+      setMembers(nextMembers)
+      setExpandedIds(new Set(collectUserIds(roots)))
+
+      const nextSelectedId = selectedUserId && nextMembers.some((member) => member.user_id === selectedUserId)
+        ? selectedUserId
+        : nextMembers[0]?.user_id || null
+      setSelectedUserId(nextSelectedId)
     } catch (error) {
       setMembers([])
       onMessage?.(error.message || 'Не удалось загрузить дерево доступа.')
@@ -123,108 +251,75 @@ export default function ProjectAccessTree({
     loadTree()
   }, [projectId])
 
-  const filteredMembers = useMemo(() => (
-    members.filter((member) => (
-      (roleFilter === 'all' || member.access_level === roleFilter)
-      && memberMatchesSearch(member, search)
-    ))
-  ), [members, roleFilter, search])
-
-  const groupedMembers = useMemo(() => {
-    const groups = {
-      admin: [],
-      manager: [],
-      member: [],
-      viewer: [],
-    }
-
-    for (const member of filteredMembers) {
-      const key = roleOrder.includes(member.access_level) ? member.access_level : 'member'
-      groups[key].push(member)
-    }
-
-    for (const group of Object.values(groups)) {
-      group.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'))
-    }
-
-    return groups
-  }, [filteredMembers])
+  const membersById = useMemo(() => new Map(members.map((member) => [member.user_id, member])), [members])
+  const selectedMember = selectedUserId ? membersById.get(selectedUserId) : null
+  const directReports = useMemo(() => getDirectReports(members, selectedUserId), [members, selectedUserId])
+  const tree = useMemo(() => filterTree(buildTree(members), search, roleFilter), [members, search, roleFilter])
 
   const stats = useMemo(() => ({
     total: members.length,
-    admin: members.filter((member) => member.access_level === 'admin').length,
-    manager: members.filter((member) => member.access_level === 'manager').length,
-    member: members.filter((member) => member.access_level === 'member').length,
-    viewer: members.filter((member) => member.access_level === 'viewer').length,
-  }), [members])
+    roots: members.filter((member) => !member.manager_user_id || !membersById.has(member.manager_user_id)).length,
+    managers: members.filter((member) => getDirectReports(members, member.user_id).length > 0).length,
+  }), [members, membersById])
 
-  function startEdit(member) {
-    setEditingUserId(member.user_id)
+  useEffect(() => {
+    if (!selectedMember) {
+      return
+    }
+
     setEditForm({
-      positionTitle: member.position_title || '',
-      accessLevel: member.access_level || 'member',
+      managerUserId: selectedMember.manager_user_id || '',
+      positionTitle: selectedMember.position_title || '',
+      accessLevel: selectedMember.access_level || 'member',
+      roleInProject: selectedMember.role_in_project || accessToRole[selectedMember.access_level] || 'member',
+      taskVisibility: selectedMember.task_visibility || 'own',
+    })
+  }, [selectedMember])
+
+  function toggleNode(userId) {
+    setExpandedIds((current) => {
+      const next = new Set(current)
+      if (next.has(userId)) {
+        next.delete(userId)
+      } else {
+        next.add(userId)
+      }
+      return next
     })
   }
 
-  async function handleSaveMember(member) {
-    if (!canManageProject) {
+  async function handleSaveSelected() {
+    if (!canManageProject || !selectedMember) {
       return
     }
 
     try {
-      setBusyUserId(member.user_id)
+      setBusy(true)
+      await updateProjectMemberManager({
+        projectId,
+        userId: selectedMember.user_id,
+        managerUserId: editForm.managerUserId || null,
+      })
+      await updateProjectMemberAccess({
+        projectId,
+        userId: selectedMember.user_id,
+        roleInProject: editForm.roleInProject,
+        taskVisibility: editForm.taskVisibility,
+      })
       await updateSupProjectMember({
         projectId,
-        userId: member.user_id,
+        userId: selectedMember.user_id,
         positionTitle: editForm.positionTitle,
         accessLevel: editForm.accessLevel,
       })
-      setEditingUserId(null)
       await loadTree()
       await onChanged?.()
-      onMessage?.('Доступ участника обновлён.')
+      onMessage?.('Структура доступа обновлена.')
     } catch (error) {
       onMessage?.(error.message)
     } finally {
-      setBusyUserId(null)
+      setBusy(false)
     }
-  }
-
-  async function handleRemoveMember(member) {
-    if (!canManageProject) {
-      return
-    }
-
-    if (member.access_level === 'admin' && getAdminCount(members) <= 1) {
-      onMessage?.('Нельзя удалить последнего администратора проекта.')
-      return
-    }
-
-    if (!window.confirm('Удалить участника из проекта?')) {
-      return
-    }
-
-    try {
-      setBusyUserId(member.user_id)
-      await removeSupProjectMember({
-        projectId,
-        userId: member.user_id,
-      })
-      await loadTree()
-      await onChanged?.()
-      onMessage?.('Участник удалён из проекта.')
-    } catch (error) {
-      onMessage?.(error.message)
-    } finally {
-      setBusyUserId(null)
-    }
-  }
-
-  function toggleGroup(groupId) {
-    setExpandedGroups((current) => ({
-      ...current,
-      [groupId]: !current[groupId],
-    }))
   }
 
   if (!projectId) {
@@ -240,7 +335,7 @@ export default function ProjectAccessTree({
       <div className="access-hero">
         <div>
           <h3>Дерево доступа</h3>
-          <p>Структура участников проекта и их права доступа.</p>
+          <p>Структура подчинения участников проекта и их доступ к задачам.</p>
         </div>
 
         <div className="access-toolbar">
@@ -259,7 +354,13 @@ export default function ProjectAccessTree({
             </button>
             {showFilters && (
               <div className="access-filter-menu">
-                {[['all', 'Все'], ...roleOrder.map((role) => [role, groupLabels[role]])].map(([value, label]) => (
+                {[
+                  ['all', 'Все'],
+                  ['admin', 'Администраторы'],
+                  ['manager', 'Менеджеры'],
+                  ['member', 'Участники'],
+                  ['viewer', 'Наблюдатели'],
+                ].map(([value, label]) => (
                   <button
                     key={value}
                     className={roleFilter === value ? 'active' : 'secondary'}
@@ -284,150 +385,140 @@ export default function ProjectAccessTree({
         </div>
       </div>
 
-      <div className="access-table-card">
-        {loading ? (
-          <p className="notice">Загрузка дерева доступа...</p>
-        ) : (
-          <>
-            <div className="access-table-head" aria-hidden="true">
-              <span>Пользователь / роль</span>
-              <span>Должность</span>
-              <span>Уровень доступа</span>
-              <span>Доступ к проекту</span>
-              <span>Права</span>
-              <span>Статус</span>
-              <span>Действия</span>
+      <div className="access-subordination-layout">
+        <div className="access-tree-card">
+          <div className="access-tree-card-head">
+            <strong>Структура проекта</strong>
+            <small>Прокручивается внутри блока, если дерево широкое или длинное.</small>
+          </div>
+
+          {loading ? (
+            <p className="notice">Загрузка дерева доступа...</p>
+          ) : tree.length === 0 ? (
+            <p className="notice">Участники не найдены.</p>
+          ) : (
+            <div className="access-tree-scroll">
+              <div className="access-root-label">Без руководителя</div>
+              {tree.map((node) => (
+                <TreeNode
+                  key={node.user_id}
+                  node={node}
+                  depth={0}
+                  selectedUserId={selectedUserId}
+                  expandedIds={expandedIds}
+                  onToggle={toggleNode}
+                  onSelect={setSelectedUserId}
+                />
+              ))}
             </div>
-
-            <div className="access-table-body">
-              {filteredMembers.length === 0 && (
-                <p className="notice access-empty">Участники не найдены</p>
-              )}
-
-              {roleOrder.map((role) => {
-                const group = groupedMembers[role]
-                const isExpanded = expandedGroups[role]
-
-                if (roleFilter !== 'all' && roleFilter !== role) {
-                  return null
-                }
-
-                if (group.length === 0 && search) {
-                  return null
-                }
-
-                return (
-                  <div className="access-group" key={role}>
-                    <button className="access-group-head" type="button" onClick={() => toggleGroup(role)}>
-                      <span>{isExpanded ? '⌄' : '›'}</span>
-                      <strong>{groupLabels[role]}</strong>
-                      <em>{group.length || 'Нет участников'}</em>
-                    </button>
-
-                    {isExpanded && group.length > 0 && (
-                      <div className="access-group-rows">
-                        {group.map((member) => {
-                          const isEditing = editingUserId === member.user_id
-
-                          return (
-                            <div className="access-member-row" key={member.user_id}>
-                              <div className="access-person-cell">
-                                <span className="access-avatar">{getInitials(member)}</span>
-                                <span>
-                                  <strong>{member.name || 'Пользователь'}</strong>
-                                  <small>{getIdentity(member)}</small>
-                                </span>
-                              </div>
-
-                              <div data-label="Должность">
-                                {isEditing ? (
-                                  <input
-                                    value={editForm.positionTitle}
-                                    onChange={(event) => setEditForm((current) => ({ ...current, positionTitle: event.target.value }))}
-                                    placeholder="Без должности"
-                                  />
-                                ) : (
-                                  <span>{member.position_title || 'Без должности'}</span>
-                                )}
-                              </div>
-
-                              <div data-label="Уровень доступа">
-                                {isEditing ? (
-                                  <select
-                                    value={editForm.accessLevel}
-                                    onChange={(event) => setEditForm((current) => ({ ...current, accessLevel: event.target.value }))}
-                                  >
-                                    {roleOrder.map((value) => (
-                                      <option key={value} value={value}>{accessLabels[value]}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span className={`access-role-badge access-role-${member.access_level}`} title={roleHelp[member.access_level]}>
-                                    <button
-                                      type="button"
-                                      onClick={() => setActiveHelp((current) => current === member.user_id ? null : member.user_id)}
-                                    >
-                                      {accessLabels[member.access_level] || member.access_level}
-                                    </button>
-                                    {activeHelp === member.user_id && (
-                                      <span className="access-role-help">{roleHelp[member.access_level]}</span>
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div data-label="Доступ к проекту">Текущий проект</div>
-                              <div data-label="Права">{rightsLabels[member.access_level] || 'Базовый доступ'}</div>
-                              <div data-label="Статус"><span className="access-status">Активен</span></div>
-
-                              <div className="access-actions" data-label="Действия">
-                                {canManageProject ? (
-                                  isEditing ? (
-                                    <>
-                                      <button type="button" onClick={() => handleSaveMember(member)} disabled={busyUserId === member.user_id}>
-                                        Сохранить
-                                      </button>
-                                      <button className="secondary" type="button" onClick={() => setEditingUserId(null)} disabled={busyUserId === member.user_id}>
-                                        Отмена
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <button className="secondary" type="button" onClick={() => startEdit(member)}>
-                                        Изменить
-                                      </button>
-                                      <button className="danger ghost" type="button" onClick={() => handleRemoveMember(member)} disabled={busyUserId === member.user_id}>
-                                        Удалить
-                                      </button>
-                                    </>
-                                  )
-                                ) : (
-                                  <span className="access-muted-action">Нет действий</span>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {isExpanded && group.length === 0 && !search && (
-                      <p className="notice access-empty">Нет участников</p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </>
-        )}
-
-        <div className="access-stats">
-          <span>Всего: {stats.total} участников</span>
-          <span>Администраторы: {stats.admin}</span>
-          <span>Менеджеры: {stats.manager}</span>
-          <span>Участники: {stats.member}</span>
-          <span>Наблюдатели: {stats.viewer}</span>
+          )}
         </div>
+
+        <aside className="access-user-card">
+          <strong>Карточка участника</strong>
+
+          {!selectedMember ? (
+            <p className="notice">Выберите участника в дереве.</p>
+          ) : (
+            <>
+              <div className="access-selected-person">
+                <span className="access-avatar">{getInitials(selectedMember)}</span>
+                <div>
+                  <h4>{getMemberName(selectedMember)}</h4>
+                  <p>{getIdentity(selectedMember)}</p>
+                </div>
+              </div>
+
+              <dl>
+                <dt>Текущий руководитель</dt>
+                <dd>{getManagerName(membersById, selectedMember.manager_user_id)}</dd>
+
+                <dt>Прямые подчинённые</dt>
+                <dd>{directReports.length > 0 ? directReports.map(getMemberName).join(', ') : 'Нет подчинённых'}</dd>
+
+                <dt>Роль в проекте</dt>
+                <dd>{roleLabels[selectedMember.role_in_project] || accessLabels[selectedMember.access_level]}</dd>
+
+                <dt>Видимость задач</dt>
+                <dd>{taskVisibilityLabels[selectedMember.task_visibility] || taskVisibilityLabels.own}</dd>
+              </dl>
+
+              {canManageProject ? (
+                <div className="access-edit-form">
+                  <label>
+                    <span>Руководитель</span>
+                    <select
+                      value={editForm.managerUserId}
+                      onChange={(event) => setEditForm((current) => ({ ...current, managerUserId: event.target.value }))}
+                    >
+                      <option value="">Без руководителя</option>
+                      {members
+                        .filter((member) => member.user_id !== selectedMember.user_id)
+                        .map((member) => (
+                          <option key={member.user_id} value={member.user_id}>
+                            {getMemberName(member)}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Должность</span>
+                    <input
+                      value={editForm.positionTitle}
+                      onChange={(event) => setEditForm((current) => ({ ...current, positionTitle: event.target.value }))}
+                      placeholder="Без должности"
+                    />
+                  </label>
+
+                  <label>
+                    <span>Роль в проекте</span>
+                    <select
+                      value={editForm.roleInProject}
+                      onChange={(event) => {
+                        const role = event.target.value
+                        const accessLevel = role === 'owner'
+                          ? 'admin'
+                          : role === 'observer'
+                            ? 'viewer'
+                            : role
+                        setEditForm((current) => ({ ...current, roleInProject: role, accessLevel }))
+                      }}
+                    >
+                      {Object.entries(roleLabels).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Доступ к задачам</span>
+                    <select
+                      value={editForm.taskVisibility}
+                      onChange={(event) => setEditForm((current) => ({ ...current, taskVisibility: event.target.value }))}
+                    >
+                      {Object.entries(taskVisibilityLabels).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <button type="button" onClick={handleSaveSelected} disabled={busy}>
+                    Сохранить
+                  </button>
+                </div>
+              ) : (
+                <p className="notice">Управлять деревом может только владелец или администратор проекта.</p>
+              )}
+            </>
+          )}
+        </aside>
+      </div>
+
+      <div className="access-stats">
+        <span>Всего: {stats.total} участников</span>
+        <span>Без руководителя: {stats.roots}</span>
+        <span>Руководителей: {stats.managers}</span>
       </div>
     </section>
   )
