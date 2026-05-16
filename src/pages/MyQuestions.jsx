@@ -92,6 +92,22 @@ function scrollToBottom(element) {
   element.scrollTop = element.scrollHeight
 }
 
+function formatSelectedFileSize(size) {
+  if (!Number.isFinite(size)) {
+    return ''
+  }
+
+  if (size < 1024) {
+    return `${size} Б`
+  }
+
+  if (size < 1024 * 1024) {
+    return `${Math.round(size / 1024)} КБ`
+  }
+
+  return `${(size / 1024 / 1024).toFixed(1)} МБ`
+}
+
 function getDirectChatTitle(conversation) {
   return conversation?.other_user?.name
     || conversation?.other_user?.public_id
@@ -108,6 +124,7 @@ export default function MyQuestions({ onBack }) {
   const [ownerConversation, setOwnerConversation] = useState(null)
   const [directConversations, setDirectConversations] = useState([])
   const [selectedChat, setSelectedChat] = useState({ type: 'owner', id: 'owner' })
+  const [mobileChatOpen, setMobileChatOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [messageText, setMessageText] = useState('')
   const [selectedFiles, setSelectedFiles] = useState([])
@@ -258,6 +275,7 @@ export default function MyQuestions({ onBack }) {
       const conversation = await startDirectChat(publicIdInput)
       setPublicIdInput('')
       setSelectedChat({ type: 'direct', id: conversation.id })
+      setMobileChatOpen(true)
       await loadChatList({ silent: true })
       await refreshAll({ type: 'direct', id: conversation.id })
     } catch (error) {
@@ -280,6 +298,7 @@ export default function MyQuestions({ onBack }) {
       setStatusMessage('')
       await deleteChat(selectedChat.id)
       setSelectedChat({ type: 'owner', id: 'owner' })
+      setMobileChatOpen(false)
       setMessages([])
       await loadChatList({ silent: true })
       await loadSelectedChat({ type: 'owner', id: 'owner' }, { silent: true })
@@ -317,8 +336,11 @@ export default function MyQuestions({ onBack }) {
     event.preventDefault()
     setStatusMessage('')
 
-    if (!messageText.trim()) {
-      setStatusMessage('Введите текст сообщения.')
+    const bodyText = messageText.trim()
+    const hasFiles = selectedFiles.length > 0
+
+    if (!bodyText && !hasFiles) {
+      setStatusMessage('Введите текст сообщения или прикрепите файл.')
       return
     }
 
@@ -327,7 +349,7 @@ export default function MyQuestions({ onBack }) {
 
       if (selectedChat.type === 'owner') {
         const result = await submitQuestion({
-          questionText: messageText,
+          questionText: bodyText || 'Пользователь отправил файл.',
           urgencyLevel: urgency,
         })
 
@@ -346,7 +368,7 @@ export default function MyQuestions({ onBack }) {
 
       const result = await sendDirectMessage({
         conversationId: selectedChat.id,
-        body: messageText,
+        body: bodyText || 'Файл',
       })
 
       await uploadSelectedFiles({
@@ -385,7 +407,13 @@ export default function MyQuestions({ onBack }) {
   }
 
   function handleFileChange(event) {
-    setSelectedFiles(Array.from(event.target.files || []))
+    const nextFiles = Array.from(event.target.files || [])
+    setSelectedFiles((current) => [...current, ...nextFiles])
+    event.target.value = ''
+  }
+
+  function removeSelectedFile(indexToRemove) {
+    setSelectedFiles((current) => current.filter((_, index) => index !== indexToRemove))
   }
 
   useEffect(() => {
@@ -416,7 +444,7 @@ export default function MyQuestions({ onBack }) {
   return (
     <div className="page-stack chat-page">
       <section className="hero-card chat-card">
-        <div className="owner-chat-shell">
+        <div className={`owner-chat-shell ${mobileChatOpen ? 'mobile-chat-open' : 'mobile-chat-list'}`}>
           <aside className="side-list">
             <div className="chat-list-title">Чаты</div>
 
@@ -443,6 +471,7 @@ export default function MyQuestions({ onBack }) {
                     onClick={() => {
                       const nextChat = { type: chat.type, id: chat.id }
                       setSelectedChat(nextChat)
+                      setMobileChatOpen(true)
                     }}
                   >
                     <span className="mini-avatar" />
@@ -466,6 +495,13 @@ export default function MyQuestions({ onBack }) {
           <div className="chat-main">
             <div className="chat-topbar">
               <div>
+                <button
+                  className="mobile-chat-back secondary"
+                  type="button"
+                  onClick={() => setMobileChatOpen(false)}
+                >
+                  ← Чаты
+                </button>
                 <h3>{activeChatTitle || 'Пользователь'}</h3>
                 {selectedChat.type === 'direct' && activeChatItem?.subtitle && (
                   <p>{activeChatItem.subtitle}</p>
@@ -576,24 +612,29 @@ export default function MyQuestions({ onBack }) {
                   rows="1"
                 />
 
+                <label className="attach-button" aria-label="Прикрепить файл">
+                  <input type="file" multiple onChange={handleFileChange} disabled={sending} />
+                  <span>+</span>
+                </label>
+
                 <button className="icon" type="submit" disabled={sending} aria-label="Отправить">
                   →
                 </button>
               </div>
 
-              <div className="file-control-row">
-                <label className="file-control">
-                  Файл
-                  <input type="file" multiple onChange={handleFileChange} disabled={sending} />
-                </label>
-                {selectedFiles.length > 0 && (
-                  <div className="selected-files">
-                    {selectedFiles.map((file) => (
-                      <span key={`${file.name}:${file.size}`}>{file.name}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {selectedFiles.length > 0 && (
+                <div className="selected-files compact-file-preview">
+                  {selectedFiles.map((file, index) => (
+                    <span key={`${file.name}:${file.size}:${index}`}>
+                      {file.name}
+                      <small>{formatSelectedFileSize(file.size)}</small>
+                      <button type="button" onClick={() => removeSelectedFile(index)} disabled={sending} aria-label="Убрать файл">
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </form>
           </div>
 

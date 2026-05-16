@@ -80,6 +80,22 @@ function scrollToBottom(element) {
   element.scrollTop = element.scrollHeight
 }
 
+function formatSelectedFileSize(size) {
+  if (!Number.isFinite(size)) {
+    return ''
+  }
+
+  if (size < 1024) {
+    return `${size} Б`
+  }
+
+  if (size < 1024 * 1024) {
+    return `${Math.round(size / 1024)} КБ`
+  }
+
+  return `${(size / 1024 / 1024).toFixed(1)} МБ`
+}
+
 function getProfileTitle(profile) {
   return profile?.name || profile?.public_id || 'Пользователь'
 }
@@ -215,8 +231,11 @@ export default function OwnerChatPanel() {
       return
     }
 
-    if (!replyText.trim()) {
-      setMessage('Введите текст ответа.')
+    const bodyText = replyText.trim()
+    const hasFiles = selectedFiles.length > 0
+
+    if (!bodyText && !hasFiles) {
+      setMessage('Введите текст ответа или прикрепите файл.')
       return
     }
 
@@ -226,7 +245,7 @@ export default function OwnerChatPanel() {
       const result = await sendChatMessage({
         conversationId: selectedConversationId,
         senderRole: 'owner',
-        body: replyText,
+        body: bodyText || 'Файл',
         importance: 'normal',
       })
 
@@ -271,11 +290,15 @@ export default function OwnerChatPanel() {
       await deleteChat(selectedConversationId)
       const nextConversations = conversations.filter((conversation) => conversation.id !== selectedConversationId)
       setConversations(nextConversations)
-      setSelectedConversationId(nextConversations[0]?.id || null)
+      const nextConversationId = nextConversations[0]?.id || null
+      setSelectedConversationId(nextConversationId)
       if (nextConversations.length === 0) {
         setSelectedConversation(null)
         setMessages([])
+      } else if (nextConversationId) {
+        await loadSelectedConversation(nextConversationId, { silent: true })
       }
+      await loadConversations({ silent: true })
     } catch (error) {
       setMessage(error.message)
     }
@@ -300,7 +323,13 @@ export default function OwnerChatPanel() {
   }
 
   function handleFileChange(event) {
-    setSelectedFiles(Array.from(event.target.files || []))
+    const nextFiles = Array.from(event.target.files || [])
+    setSelectedFiles((current) => [...current, ...nextFiles])
+    event.target.value = ''
+  }
+
+  function removeSelectedFile(indexToRemove) {
+    setSelectedFiles((current) => current.filter((_, index) => index !== indexToRemove))
   }
 
   function handleComposerKeyDown(event) {
@@ -510,24 +539,28 @@ export default function OwnerChatPanel() {
                     placeholder="текст"
                     rows="1"
                   />
+                  <label className="attach-button" aria-label="Прикрепить файл">
+                    <input type="file" multiple onChange={handleFileChange} disabled={sending} />
+                    <span>+</span>
+                  </label>
 
                   <button className="icon" type="submit" disabled={sending} aria-label="Отправить">
                     →
                   </button>
                 </div>
-                <div className="file-control-row">
-                  <label className="file-control">
-                    Файл
-                    <input type="file" multiple onChange={handleFileChange} disabled={sending} />
-                  </label>
-                  {selectedFiles.length > 0 && (
-                    <div className="selected-files">
-                      {selectedFiles.map((file) => (
-                        <span key={`${file.name}:${file.size}`}>{file.name}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {selectedFiles.length > 0 && (
+                  <div className="selected-files compact-file-preview">
+                    {selectedFiles.map((file, index) => (
+                      <span key={`${file.name}:${file.size}:${index}`}>
+                        {file.name}
+                        <small>{formatSelectedFileSize(file.size)}</small>
+                        <button type="button" onClick={() => removeSelectedFile(index)} disabled={sending} aria-label="Убрать файл">
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </form>
             </>
           )}

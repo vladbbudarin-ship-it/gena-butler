@@ -7,6 +7,7 @@ import {
   createSupProject,
   createSupTask,
   deleteSupProject,
+  deleteSupAiSuggestion,
   getMyProfile,
   getSupProjectDetails,
   getSupProjects,
@@ -72,7 +73,7 @@ const projectTabs = [
   { id: 'overview', label: 'Обзор' },
   { id: 'tasks', label: 'Задачи' },
   { id: 'members', label: 'Участники' },
-  { id: 'access', label: 'Структура', managerOnly: true },
+  { id: 'access', label: 'Дерево доступа' },
   { id: 'files', label: 'Файлы' },
   { id: 'ai', label: 'AI-контекст' },
 ]
@@ -180,6 +181,7 @@ export default function Projects({ user, onBack }) {
   const canManageTasks = canCreate && ['admin', 'manager'].includes(myAccess)
   const canDeleteProject = canManageProject
   const selectedTask = taskDetails?.task
+  const canAttachTaskFile = Boolean(selectedTask && myAccess && myAccess !== 'viewer')
   const canCompleteTask = selectedTask?.assignee_id === profile?.id && !['done', 'review'].includes(selectedTask?.status)
   const canReviewTask = selectedTask && (selectedTask.created_by === profile?.id || ['admin', 'manager'].includes(myAccess))
 
@@ -188,12 +190,6 @@ export default function Projects({ user, onBack }) {
     id: member.user_id,
     label: getProfileName(member.profile),
   })), [projectMembers])
-
-  useEffect(() => {
-    if (activeTab === 'access' && !canManageProject) {
-      setActiveTab('overview')
-    }
-  }, [activeTab, canManageProject])
 
   async function loadProjects(nextSelectedId = selectedProjectId) {
     const data = await getSupProjects()
@@ -509,6 +505,26 @@ export default function Projects({ user, onBack }) {
         prompt: aiPrompt,
       })
       setAiPrompt('')
+      await loadProjectDetails(selectedProjectId)
+      if (selectedTaskId) {
+        await loadTaskDetails(selectedTaskId)
+      }
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteAiSuggestion(suggestionId) {
+    if (!suggestionId || !window.confirm('Удалить AI-ответ из истории?')) {
+      return
+    }
+
+    try {
+      setBusy(true)
+      setMessage('')
+      await deleteSupAiSuggestion(suggestionId)
       await loadProjectDetails(selectedProjectId)
       if (selectedTaskId) {
         await loadTaskDetails(selectedTaskId)
@@ -851,6 +867,29 @@ export default function Projects({ user, onBack }) {
                             </div>
                           )}
 
+                          <div className="task-files-block">
+                            <div className="task-files-header">
+                              <h5>Файлы задачи</h5>
+                              {canAttachTaskFile && (
+                                <label className="file-control compact-attach">
+                                  Прикрепить файл
+                                  <input type="file" onChange={handleTaskFile} disabled={busy || !selectedTaskId} />
+                                </label>
+                              )}
+                            </div>
+                            <AttachmentList
+                              files={(taskDetails.files || []).map((file) => ({ ...file, kind: 'sup_task' }))}
+                              kind="sup_task"
+                              canDelete={(file) => file.uploaded_by === profile?.id || canManageTasks || canManageProject}
+                              onChanged={async () => {
+                                if (selectedTaskId) {
+                                  await loadTaskDetails(selectedTaskId)
+                                }
+                              }}
+                            />
+                            {(taskDetails.files || []).length === 0 && <p className="notice">Файлов у задачи пока нет.</p>}
+                          </div>
+
                           <div className="sup-mini-list">
                             {[...(taskDetails.updates || []).map((item) => ({ ...item, kind: 'Дополнение' })), ...(taskDetails.comments || []).map((item) => ({ ...item, kind: 'Комментарий' }))].map((item) => (
                               <div className="sup-row" key={`${item.kind}:${item.id}`}>
@@ -944,11 +983,12 @@ export default function Projects({ user, onBack }) {
                   </section>
                 )}
 
-                {activeTab === 'access' && canManageProject && (
+                {activeTab === 'access' && (
                   <section className="dashboard-card">
                     <ProjectAccessTree
                       projectId={selectedProjectId}
-                      projects={projects}
+                      canManageProject={canManageProject}
+                      onAddMemberClick={() => setActiveTab('members')}
                       onMessage={setMessage}
                       onChanged={() => loadProjectDetails(selectedProjectId)}
                     />
@@ -959,23 +999,20 @@ export default function Projects({ user, onBack }) {
                   <section className="dashboard-card">
                     <h4>Файлы</h4>
                     <div className="sup-file-actions">
-                      {canManageTasks && (
+                      {canAttachTaskFile && (
                         <label className="file-control">
                           Файл задачи
                           <input type="file" onChange={handleTaskFile} disabled={busy || !selectedTaskId} />
                         </label>
                       )}
                     </div>
+                    {!selectedTaskId && <p className="notice">Выберите задачу, чтобы увидеть её файлы.</p>}
                     <div className="sup-mini-list">
                       <AttachmentList
-                        files={[
-                          ...(projectDetails.files || []).map((file) => ({ ...file, kind: 'sup_project' })),
-                          ...(taskDetails?.files || []).map((file) => ({ ...file, kind: 'sup_task' })),
-                        ]}
+                        files={(taskDetails?.files || []).map((file) => ({ ...file, kind: 'sup_task' }))}
                         kind="sup_task"
-                        canDelete={(file) => file.kind === 'sup_project' ? canManageProject : canManageTasks}
+                        canDelete={(file) => file.uploaded_by === profile?.id || canManageTasks || canManageProject}
                         onChanged={async () => {
-                          await loadProjectDetails(selectedProjectId)
                           if (selectedTaskId) {
                             await loadTaskDetails(selectedTaskId)
                           }
@@ -1017,15 +1054,27 @@ export default function Projects({ user, onBack }) {
                         </form>
                       )}
                       <div className="sup-mini-list">
-                        {[...(taskDetails?.suggestions || []), ...(projectDetails.suggestions || [])].map((item) => (
+                        {[...(taskDetails?.suggestions || []), ...(projectDetails.suggestions || []).filter((item) => item.task_id !== selectedTaskId)].map((item) => (
                           <div className="sup-row" key={item.id}>
                             <div>
                               <strong>AI · {formatDateTime(item.created_at)}</strong>
+                              <span className="muted-caption">{item.task_id ? 'Гена СУП · задача' : 'Гена СУП · проект'}</span>
                               <small>{item.prompt}</small>
                               <p>{item.suggestion}</p>
                             </div>
+                            <button
+                              className="tiny-link danger-text"
+                              type="button"
+                              onClick={() => handleDeleteAiSuggestion(item.id)}
+                              disabled={busy}
+                            >
+                              Удалить
+                            </button>
                           </div>
                         ))}
+                        {[...(taskDetails?.suggestions || []), ...(projectDetails.suggestions || []).filter((item) => item.task_id !== selectedTaskId)].length === 0 && (
+                          <p className="notice">AI-истории пока нет.</p>
+                        )}
                       </div>
                     </section>
                   </div>

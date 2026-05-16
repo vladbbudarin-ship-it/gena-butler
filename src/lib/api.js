@@ -1098,9 +1098,8 @@ export async function getSupProjectDetails(projectId) {
       .from('sup_ai_suggestions')
       .select('*')
       .eq('project_id', projectId)
-      .is('task_id', null)
       .order('created_at', { ascending: false })
-      .limit(10),
+      .limit(30),
   ])
 
   if (projectResult.error) {
@@ -1134,7 +1133,7 @@ export async function getSupProjectDetails(projectId) {
       creator: profilesById[task.created_by] || null,
     })),
     files: (filesResult.data || []).filter((file) => !file.deleted_at),
-    suggestions: suggestionsResult.data || [],
+    suggestions: (suggestionsResult.data || []).filter((item) => !item.deleted_at),
   }
 }
 
@@ -1295,7 +1294,7 @@ export async function getSupTaskDetails(taskId) {
       profile: profilesById[row.user_id] || null,
     })),
     files: (filesResult.data || []).filter((file) => !file.deleted_at),
-    suggestions: suggestionsResult.data || [],
+    suggestions: (suggestionsResult.data || []).filter((item) => !item.deleted_at),
     visibleUserIds: (visibleResult.data || []).map((row) => row.user_id),
   }
 }
